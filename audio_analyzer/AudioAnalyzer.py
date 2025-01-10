@@ -6,19 +6,22 @@ import json
 
 class AudioAnalyzer:
     def __init__(self, file_path: str):
-        abs_path = abspath(file_path)
-
-        if isfile(abs_path):
-            self.__file_path = abs_path
-        else:
-            raise Exception(f"Path {abs_path} does not exist.")
-
+        self.__file_path = None
+        self.file_path = file_path  # Setter method
         self.__model_path = abspath("./audio_analyzer/models")
         self.__audio = self.__get_essentia_audio()
 
     @property
     def file_path(self):
         return self.__file_path
+
+    @file_path.setter
+    def file_path(self, new_path: str):
+        abs_path = abspath(new_path)
+
+        if not isfile(abs_path):
+            raise FileNotFoundError(f"The file '{abs_path}' does not exist")
+        self.__file_path = new_path
 
     def get_metadata(self) -> dict:
         """Get the metadata of a song
@@ -44,8 +47,12 @@ class AudioAnalyzer:
             dict: rhythm data, e.g. {"bpm": 140}
         """
         rhythm_extractor = RhythmExtractor2013(method="multifeature")
-        bpm, beats, beats_confidence, _, beats_intervals = rhythm_extractor(
-            self.__audio)
+        try:
+            bpm, beats, beats_confidence, _, beats_intervals = rhythm_extractor(
+                self.__audio)
+        except Exception as e:
+            print(f"An error occured while loading the rhythm data: {e}")
+
         return {"bpm": bpm, "beats": beats, "beats_confidence": beats_confidence, "beats_intervals": beats_intervals}
 
     def __get_essentia_audio(self) -> MonoLoader:
@@ -88,13 +95,16 @@ class AudioAnalyzer:
         )
 
         # Create embeddings based on pre-trained model (e.g. musiccn, effnet)
-
-        if audio_config["model"] == "musicnn":
-            embedding_model = TensorflowPredictMusiCNN(
-                graphFilename=embedding_graph_file_path, output="model/dense/BiasAdd")
-        elif audio_config["model"] == "effnet":
-            embedding_model = TensorflowPredictEffnetDiscogs(
-                graphFilename=embedding_graph_file_path, output="PartitionedCall:1")
+        try:
+            if audio_config["model"] == "musicnn":
+                embedding_model = TensorflowPredictMusiCNN(
+                    graphFilename=embedding_graph_file_path, output="model/dense/BiasAdd")
+            elif audio_config["model"] == "effnet":
+                embedding_model = TensorflowPredictEffnetDiscogs(
+                    graphFilename=embedding_graph_file_path, output="PartitionedCall:1")
+        except FileNotFoundError:
+            print(
+                f"Embedding graph file path not found: {embedding_graph_file_path}")
 
         embeddings = embedding_model(self.__audio)
 
@@ -126,11 +136,15 @@ class AudioAnalyzer:
         """
         audio_config = self.__get_audio_feature_config(audio_feature)
         predictions = self.get_predictions(audio_feature)
+        probability_cutoff = 0.5
 
         if audio_config["algorithm"] == "regression":
             avg_predictions = np.mean(predictions, axis=0)
             return tuple(avg_predictions)
         elif audio_config["algorithm"] == "classifier":
-            count = np.sum(predictions[:, category] > 0.5)
-            ratio = float(count / len(predictions))
-            return ratio
+            try:
+                count = np.sum(predictions[:, category] > probability_cutoff)
+                ratio = float(count / len(predictions))
+                return ratio
+            except (IndexError, KeyError):
+                print(f"Column {category} does not exist.")
