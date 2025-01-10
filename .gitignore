@@ -1,0 +1,4 @@
+venv/
+music/
+__pycache__/
+.env
