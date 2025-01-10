@@ -1,12 +1,19 @@
 from essentia.standard import MonoLoader, MetadataReader, TensorflowPredictEffnetDiscogs, TensorflowPredict2D, TensorflowPredictMusiCNN, RhythmExtractor2013
 import numpy as np
+from os.path import isfile, abspath, join
 import json
 
 
 class AudioAnalyzer:
     def __init__(self, file_path: str):
-        self.__file_path = file_path
-        self.__model_path = "./models/"
+        abs_path = abspath(file_path)
+
+        if isfile(abs_path):
+            self.__file_path = abs_path
+        else:
+            raise Exception(f"Path {abs_path} does not exist.")
+
+        self.__model_path = abspath("./audio_analyzer/models")
         self.__audio = self.__get_essentia_audio()
 
     @property
@@ -22,10 +29,13 @@ class AudioAnalyzer:
         metadata_pool = MetadataReader(filename=self.__file_path)()[7]
         metadata = {}
 
-        for descriptor in metadata_pool.descriptorNames():
-            key = descriptor.split(".")[-1]
-            metadata[key] = metadata_pool[descriptor][0]
-        return metadata
+        try:
+            for descriptor in metadata_pool.descriptorNames():
+                key = descriptor.split(".")[-1]
+                metadata[key] = metadata_pool[descriptor][0]
+            return metadata
+        except IndexError:
+            print("Index out of bound")
 
     def get_rhythm_data(self) -> dict:
         """Get the rhythm data of a song, e.g. bpm, beats, beats_confidence, _, beats_intervals
@@ -53,7 +63,10 @@ class AudioAnalyzer:
         Returns:
             float: _description_
         """
-        with open("./data/audio_features_config.json", "r") as file:
+        config_json = abspath(
+            "./audio_analyzer/data/audio_features_config.json")
+
+        with open(config_json, "r") as file:
             parameters = json.load(file)
 
         return parameters[audio_feature]
@@ -68,26 +81,31 @@ class AudioAnalyzer:
             np.ndarray: Predictions for each segment of a song
         """
         audio_config = self.__get_audio_feature_config(audio_feature)
+        embedding_graph_file_path = join(
+            self.__model_path, audio_config["embedding_graph_filename"])
+        prediction_graph_file_path = join(
+            self.__model_path, audio_config["prediction_graph_filename"]
+        )
 
         # Create embeddings based on pre-trained model (e.g. musiccn, effnet)
-        match audio_config["model"]:
-            case "musicnn":
-                embedding_model = TensorflowPredictMusiCNN(
-                    graphFilename=f"{self.__model_path}{audio_config['embedding_graph_filename']}", output="model/dense/BiasAdd")
-            case "effnet":
-                embedding_model = TensorflowPredictEffnetDiscogs(
-                    graphFilename=f"{self.__model_path}{audio_config['embedding_graph_filename']}", output="PartitionedCall:1")
+
+        if audio_config["model"] == "musicnn":
+            embedding_model = TensorflowPredictMusiCNN(
+                graphFilename=embedding_graph_file_path, output="model/dense/BiasAdd")
+        elif audio_config["model"] == "effnet":
+            embedding_model = TensorflowPredictEffnetDiscogs(
+                graphFilename=embedding_graph_file_path, output="PartitionedCall:1")
 
         embeddings = embedding_model(self.__audio)
 
         # Create predictions based on algorithm (regression, classifier)
-        match audio_config["algorithm"]:
-            case "regression":
-                prediction_model = TensorflowPredict2D(
-                    graphFilename=f"{self.__model_path}{audio_config['prediction_graph_filename']}", output="model/Identity")
-            case "classifier":
-                prediction_model = TensorflowPredict2D(
-                    graphFilename=f"{self.__model_path}{audio_config['prediction_graph_filename']}", output="model/Softmax")
+
+        if audio_config["algorithm"] == "regression":
+            prediction_model = TensorflowPredict2D(
+                graphFilename=prediction_graph_file_path, output="model/Identity")
+        elif audio_config["algorithm"] == "classifier":
+            prediction_model = TensorflowPredict2D(
+                graphFilename=prediction_graph_file_path, output="model/Softmax")
 
         predictions = prediction_model(embeddings)
         return predictions
@@ -109,11 +127,10 @@ class AudioAnalyzer:
         audio_config = self.__get_audio_feature_config(audio_feature)
         predictions = self.get_predictions(audio_feature)
 
-        match audio_config["algorithm"]:
-            case "regression":
-                avg_predictions = np.mean(predictions, axis=0)
-                return tuple(avg_predictions)
-            case "classifier":
-                count = np.sum(predictions[:, category] > 0.5)
-                ratio = float(count / len(predictions))
-                return ratio
+        if audio_config["algorithm"] == "regression":
+            avg_predictions = np.mean(predictions, axis=0)
+            return tuple(avg_predictions)
+        elif audio_config["algorithm"] == "classifier":
+            count = np.sum(predictions[:, category] > 0.5)
+            ratio = float(count / len(predictions))
+            return ratio

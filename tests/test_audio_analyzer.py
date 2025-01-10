@@ -5,7 +5,7 @@ from audio_analyzer.AudioAnalyzer import AudioAnalyzer
 
 @pytest.fixture
 def audio_analyzer() -> AudioAnalyzer:
-    file_path = "../music/happy_male_voice.mp3"
+    file_path = "../deejayssentia/music/happy_male_voice.mp3"
     return AudioAnalyzer(file_path)
 
 
