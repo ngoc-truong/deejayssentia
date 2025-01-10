@@ -1,5 +1,6 @@
 venv/
 music/
 models/
+data/
 __pycache__/
 .env

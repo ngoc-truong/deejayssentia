@@ -1,2 +1,3 @@
 essentia-tensorflow
 numpy<2
+mutagen
