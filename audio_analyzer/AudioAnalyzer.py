@@ -1,4 +1,4 @@
-from essentia.standard import MonoLoader, MetadataReader, TensorflowPredictEffnetDiscogs, TensorflowPredict2D, TensorflowPredictMusiCNN
+from essentia.standard import MonoLoader, MetadataReader, TensorflowPredictEffnetDiscogs, TensorflowPredict2D, TensorflowPredictMusiCNN, RhythmExtractor2013
 import numpy as np
 import json
 
@@ -17,7 +17,7 @@ class AudioAnalyzer:
         """Get the metadata of a song
 
         Returns:
-            dict: key and value of the metadata, e.g.{"album": "The Wildest!"}
+            dict: key and value of the metadata, e.g. {"album": "The Wildest!"}
         """
         metadata_pool = MetadataReader(filename=self.__file_path)()[7]
         metadata = {}
@@ -26,6 +26,17 @@ class AudioAnalyzer:
             key = descriptor.split(".")[-1]
             metadata[key] = metadata_pool[descriptor][0]
         return metadata
+
+    def get_rhythm_data(self) -> dict:
+        """Get the rhythm data of a song, e.g. bpm, beats, beats_confidence, _, beats_intervals
+
+        Returns:
+            dict: rhythm data, e.g. {"bpm": 140}
+        """
+        rhythm_extractor = RhythmExtractor2013(method="multifeature")
+        bpm, beats, beats_confidence, _, beats_intervals = rhythm_extractor(
+            self.__audio)
+        return {"bpm": bpm, "beats": beats, "beats_confidence": beats_confidence, "beats_intervals": beats_intervals}
 
     def __get_essentia_audio(self) -> MonoLoader:
         """Load the file into an Essentia audio object
@@ -36,7 +47,7 @@ class AudioAnalyzer:
         return MonoLoader(filename=self.__file_path,
                           sampleRate=16000, resampleQuality=4)()
 
-    def __get_audio_feature_config(self, audio_feature: str) -> float:
+    def __get_audio_feature_config(self, audio_feature: str) -> dict:
         """Get the model name and graph filenames used for prediction of an audio feature
 
         Returns:
@@ -47,7 +58,7 @@ class AudioAnalyzer:
 
         return parameters[audio_feature]
 
-    def calculate_predictions(self, audio_feature: str) -> np.ndarray:
+    def get_predictions(self, audio_feature: str) -> np.ndarray:
         """Calculate predictions of an audio feature
             https://essentia.upf.edu/models.html for meaning of values, e.g. first column happy, second column non_happy
         Args:
@@ -58,7 +69,7 @@ class AudioAnalyzer:
         """
         audio_config = self.__get_audio_feature_config(audio_feature)
 
-        # Create embeddings based on pre-trained model (musiccn, effnet)
+        # Create embeddings based on pre-trained model (e.g. musiccn, effnet)
         match audio_config["model"]:
             case "musicnn":
                 embedding_model = TensorflowPredictMusiCNN(
@@ -82,9 +93,9 @@ class AudioAnalyzer:
         return predictions
 
     def calculate_prediction_metric(self, audio_feature: str, category: int = 0) -> tuple | float:
-        """ Calculate a single prediction metric, 
+        """ Calculate a single prediction metric from several predictions (for each segment in a song)
             e.g. a ratio for classifiers (e.g. danceable/non-danceable ratio)
-            or an average for regression
+            or a mean for regression
 
         Args:
             audio_feature (str): Name of the audio feature
@@ -96,7 +107,7 @@ class AudioAnalyzer:
             tuple | float: _description_
         """
         audio_config = self.__get_audio_feature_config(audio_feature)
-        predictions = self.calculate_predictions(audio_feature)
+        predictions = self.get_predictions(audio_feature)
 
         match audio_config["algorithm"]:
             case "regression":
@@ -106,10 +117,3 @@ class AudioAnalyzer:
                 count = np.sum(predictions[:, category] > 0.5)
                 ratio = float(count / len(predictions))
                 return ratio
-
-
-if __name__ == "__main__":
-    # Testing
-    file_path = "/Users/ntruong/Documents/Personal/Programming/Projects/deejayssentia/music/happy_male_voice.mp3"
-    audio_analyzer = AudioAnalyzer(file_path)
-    print(audio_analyzer.calculate_prediction_metric("bright_dark"))
