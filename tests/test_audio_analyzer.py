@@ -1,12 +1,12 @@
 import pytest
 import numpy as np
 from audio_analyzer.AudioAnalyzer import AudioAnalyzer
-from pathlib import Path, PosixPath
+from pathlib import Path
 
 
 @pytest.fixture
 def audio_analyzer() -> AudioAnalyzer:
-    file_path: PosixPath = Path.cwd().joinpath("music", "happy_male_voice.mp3")
+    file_path: Path = Path.cwd().joinpath("music", "happy_male_voice.mp3")
     return AudioAnalyzer(file_path)
 
 
