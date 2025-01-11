@@ -1,6 +1,6 @@
 from essentia.standard import MonoLoader, MetadataReader, TensorflowPredictEffnetDiscogs, TensorflowPredict2D, TensorflowPredictMusiCNN, RhythmExtractor2013
 import numpy as np
-from pathlib import Path
+from pathlib import Path, PosixPath, WindowsPath
 import json
 
 
@@ -8,9 +8,9 @@ class AudioAnalyzer:
     """A class to analyze audio files, e.g. getting audio track features like valence, danceability, aggressiveness.
     """
 
-    def __init__(self, file_path: str):
-        self.__file_path: str = None        # Must be string
-        self.file_path: str = file_path     # Setter method
+    def __init__(self, file_path: str | Path):
+        self.__file_path: str = None        # Must be string to work with Essentia
+        self.file_path = file_path          # Setter method
         self.__model_path: Path = Path.cwd().joinpath("audio_analyzer", "models")
         self.__audio: MonoLoader = self.__get_essentia_audio()
 
@@ -19,8 +19,11 @@ class AudioAnalyzer:
         return self.__file_path
 
     @file_path.setter
-    def file_path(self, new_path: str) -> None:
-        abs_path = Path.resolve(new_path)
+    def file_path(self, new_path: str | Path) -> None:
+        if isinstance(new_path, str):
+            abs_path = Path(new_path).resolve()
+        elif isinstance(new_path, Path) or isinstance(new_path, PosixPath) or isinstance(new_path, WindowsPath):
+            abs_path = new_path.resolve()
 
         if not abs_path.is_file():
             raise FileNotFoundError(f"The file '{abs_path}' does not exist")
@@ -169,3 +172,8 @@ class AudioAnalyzer:
                 return ratio
             except IndexError:
                 print(f"Column {category} does not exist.")
+
+
+if __name__ == "__main__":
+    file_path: Path = Path.cwd().joinpath("..", "music", "happy_male_voice.mp3")
+    audio_analyzer: AudioAnalyzer = AudioAnalyzer(file_path)
