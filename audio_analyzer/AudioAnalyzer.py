@@ -1,14 +1,17 @@
 from essentia.standard import MonoLoader, MetadataReader, TensorflowPredictEffnetDiscogs, TensorflowPredict2D, TensorflowPredictMusiCNN, RhythmExtractor2013
 import numpy as np
-from os.path import isfile, abspath, join
+from pathlib import Path
 import json
 
 
 class AudioAnalyzer:
+    """A class to analyze audio files, e.g. getting audio track features like valence, danceability, aggressiveness.
+    """
+
     def __init__(self, file_path: str):
-        self.__file_path: str = None
-        self.file_path: str = file_path  # Setter method
-        self.__model_path: str = abspath("./audio_analyzer/models")
+        self.__file_path: str = None        # Must be string
+        self.file_path: str = file_path     # Setter method
+        self.__model_path: Path = Path.cwd().joinpath("audio_analyzer", "models")
         self.__audio: MonoLoader = self.__get_essentia_audio()
 
     @property
@@ -17,9 +20,11 @@ class AudioAnalyzer:
 
     @file_path.setter
     def file_path(self, new_path: str) -> None:
-        if not isfile(abs_path := abspath(new_path)):
+        abs_path = Path.resolve(new_path)
+
+        if not abs_path.is_file():
             raise FileNotFoundError(f"The file '{abs_path}' does not exist")
-        self.__file_path: str = abs_path
+        self.__file_path = str(abs_path)
 
     def get_metadata(self) -> dict:
         """Get the metadata of a song
@@ -59,11 +64,10 @@ class AudioAnalyzer:
 
             bpm, beats, beats_confidence, _, beats_intervals = rhythm_extractor(
                 self.__audio)
+            return {"bpm": bpm, "beats": beats, "beats_confidence": beats_confidence, "beats_intervals": beats_intervals}
         except Exception as e:
             print(
                 f"An error occured while loading the rhythm data, did you clap on 1 and 3? {e}")
-        else:
-            return {"bpm": bpm, "beats": beats, "beats_confidence": beats_confidence, "beats_intervals": beats_intervals}
 
     def __get_essentia_audio(self) -> MonoLoader:
         """Load the file into an Essentia audio object
@@ -80,13 +84,16 @@ class AudioAnalyzer:
         Returns:
             float: _description_
         """
-        config_json: str = abspath(
-            "./audio_analyzer/data/audio_features_config.json")
+        config_json: Path = Path.resolve(Path(
+            "./audio_analyzer/data/audio_features_config.json"))
 
-        with open(config_json, "r") as file:
-            parameters: dict = json.load(file)
+        try:
+            with open(config_json, "r") as file:
+                parameters: dict = json.load(file)
 
-        return parameters[audio_feature]
+            return parameters[audio_feature]
+        except FileNotFoundError:
+            print(f"The file {config_json} could not be found, sadness!")
 
     def get_predictions(self, audio_feature: str) -> np.ndarray:
         """Calculate predictions of an audio feature
@@ -98,11 +105,11 @@ class AudioAnalyzer:
             np.ndarray: Predictions for each segment of a song
         """
         audio_config: dict = self.__get_audio_feature_config(audio_feature)
-        embedding_graph_file_path: str = join(
-            self.__model_path, audio_config["embedding_graph_filename"])
-        prediction_graph_file_path: str = join(
-            self.__model_path, audio_config["prediction_graph_filename"]
-        )
+
+        embedding_graph_file_path: str = str(Path.joinpath(
+            self.__model_path, audio_config["embedding_graph_filename"]))
+        prediction_graph_file_path: str = str(Path.joinpath(
+            self.__model_path, audio_config["prediction_graph_filename"]))
 
         # Create embeddings based on pre-trained model (e.g. musiccn, effnet)
         try:
@@ -149,15 +156,16 @@ class AudioAnalyzer:
         probability_cutoff: float = 0.5
 
         if audio_config["algorithm"] == "regression":
-            avg_predictions: np.ndarray = np.mean(predictions, axis=0)
-
-            return tuple(avg_predictions)
+            try:
+                avg_predictions: np.ndarray = np.mean(predictions, axis=0)
+                return tuple(avg_predictions)
+            except Exception as e:
+                print(e)
         elif audio_config["algorithm"] == "classifier":
             try:
                 count: np.int64 = np.sum(
                     predictions[:, category] > probability_cutoff)
                 ratio: float = float(count / len(predictions))
-            except (IndexError, KeyError):
-                print(f"Column {category} does not exist.")
-            else:
                 return ratio
+            except IndexError:
+                print(f"Column {category} does not exist.")
