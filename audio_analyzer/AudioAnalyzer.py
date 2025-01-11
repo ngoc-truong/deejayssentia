@@ -94,7 +94,7 @@ class AudioAnalyzer:
         return MonoLoader(filename=self.__file_path,
                           sampleRate=16000, resampleQuality=4)()
 
-    def get_audio_feature_config(self) -> dict:
+    def __get_audio_feature_config(self) -> dict:
         """ Get the whole audio feature config for all audio features (e.g. danceability, 
             aggressiveness). It contains values like model (effnet, musicnn), algorithm 
             (regression, classifier) and file path names.
@@ -119,7 +119,7 @@ class AudioAnalyzer:
         Returns:
             dict: Config parameters (e.g. graph filename) for one audio feature, e.g. danceability
         """
-        parameters = self.get_audio_feature_config()
+        parameters = self.__get_audio_feature_config()
         return parameters[audio_feature]
 
     def get_predictions(self, audio_feature: str) -> np.ndarray:
@@ -211,7 +211,7 @@ class AudioAnalyzer:
         audio_info: dict = self.get_metadata()
 
         # audio feature predictions
-        audio_feature_config: dict = self.get_audio_feature_config()
+        audio_feature_config: dict = self.__get_audio_feature_config()
         audio_features = list(audio_feature_config.keys())
         predictions: dict = {feature: self.calculate_prediction_metric(
             feature) for feature in audio_features}
