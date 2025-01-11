@@ -6,22 +6,20 @@ import json
 
 class AudioAnalyzer:
     def __init__(self, file_path: str):
-        self.__file_path = None
-        self.file_path = file_path  # Setter method
-        self.__model_path = abspath("./audio_analyzer/models")
-        self.__audio = self.__get_essentia_audio()
+        self.__file_path: str = None
+        self.file_path: str = file_path  # Setter method
+        self.__model_path: str = abspath("./audio_analyzer/models")
+        self.__audio: MonoLoader = self.__get_essentia_audio()
 
     @property
     def file_path(self):
         return self.__file_path
 
     @file_path.setter
-    def file_path(self, new_path: str):
-        abs_path = abspath(new_path)
-
-        if not isfile(abs_path):
+    def file_path(self, new_path: str) -> None:
+        if not isfile(abs_path := abspath(new_path)):
             raise FileNotFoundError(f"The file '{abs_path}' does not exist")
-        self.__file_path = new_path
+        self.__file_path: str = abs_path
 
     def get_metadata(self) -> dict:
         """Get the metadata of a song
@@ -29,16 +27,22 @@ class AudioAnalyzer:
         Returns:
             dict: key and value of the metadata, e.g. {"album": "The Wildest!"}
         """
-        metadata_pool = MetadataReader(filename=self.__file_path)()[7]
-        metadata = {}
+        try:
+            metadata_pool: MetadataReader = MetadataReader(
+                filename=self.__file_path)()[7]
+        except IndexError:
+            print("Index out of bounty hunter.")
+
+        metadata: dict = {}
 
         try:
             for descriptor in metadata_pool.descriptorNames():
-                key = descriptor.split(".")[-1]
+                key: str = descriptor.split(".")[-1]
                 metadata[key] = metadata_pool[descriptor][0]
-            return metadata
         except IndexError:
-            print("Index out of bound")
+            print("Index out of bounty hunter.")
+        else:
+            return metadata
 
     def get_rhythm_data(self) -> dict:
         """Get the rhythm data of a song, e.g. bpm, beats, beats_confidence, _, beats_intervals
@@ -48,12 +52,18 @@ class AudioAnalyzer:
         """
         rhythm_extractor = RhythmExtractor2013(method="multifeature")
         try:
+            bpm: float
+            beats: np.ndarray
+            beats_confidence: float
+            beats_intervals: np.ndarray
+
             bpm, beats, beats_confidence, _, beats_intervals = rhythm_extractor(
                 self.__audio)
         except Exception as e:
-            print(f"An error occured while loading the rhythm data: {e}")
-
-        return {"bpm": bpm, "beats": beats, "beats_confidence": beats_confidence, "beats_intervals": beats_intervals}
+            print(
+                f"An error occured while loading the rhythm data, did you clap on 1 and 3? {e}")
+        else:
+            return {"bpm": bpm, "beats": beats, "beats_confidence": beats_confidence, "beats_intervals": beats_intervals}
 
     def __get_essentia_audio(self) -> MonoLoader:
         """Load the file into an Essentia audio object
@@ -70,11 +80,11 @@ class AudioAnalyzer:
         Returns:
             float: _description_
         """
-        config_json = abspath(
+        config_json: str = abspath(
             "./audio_analyzer/data/audio_features_config.json")
 
         with open(config_json, "r") as file:
-            parameters = json.load(file)
+            parameters: dict = json.load(file)
 
         return parameters[audio_feature]
 
@@ -87,37 +97,37 @@ class AudioAnalyzer:
         Returns:
             np.ndarray: Predictions for each segment of a song
         """
-        audio_config = self.__get_audio_feature_config(audio_feature)
-        embedding_graph_file_path = join(
+        audio_config: dict = self.__get_audio_feature_config(audio_feature)
+        embedding_graph_file_path: str = join(
             self.__model_path, audio_config["embedding_graph_filename"])
-        prediction_graph_file_path = join(
+        prediction_graph_file_path: str = join(
             self.__model_path, audio_config["prediction_graph_filename"]
         )
 
         # Create embeddings based on pre-trained model (e.g. musiccn, effnet)
         try:
             if audio_config["model"] == "musicnn":
-                embedding_model = TensorflowPredictMusiCNN(
+                embedding_model: 'Algo' = TensorflowPredictMusiCNN(
                     graphFilename=embedding_graph_file_path, output="model/dense/BiasAdd")
             elif audio_config["model"] == "effnet":
-                embedding_model = TensorflowPredictEffnetDiscogs(
+                embedding_model: 'Algo' = TensorflowPredictEffnetDiscogs(
                     graphFilename=embedding_graph_file_path, output="PartitionedCall:1")
         except FileNotFoundError:
             print(
                 f"Embedding graph file path not found: {embedding_graph_file_path}")
 
-        embeddings = embedding_model(self.__audio)
+        embeddings: np.ndarray = embedding_model(self.__audio)
 
         # Create predictions based on algorithm (regression, classifier)
-
         if audio_config["algorithm"] == "regression":
-            prediction_model = TensorflowPredict2D(
+            prediction_model: 'Algo' = TensorflowPredict2D(
                 graphFilename=prediction_graph_file_path, output="model/Identity")
         elif audio_config["algorithm"] == "classifier":
-            prediction_model = TensorflowPredict2D(
+            prediction_model: 'Algo' = TensorflowPredict2D(
                 graphFilename=prediction_graph_file_path, output="model/Softmax")
 
-        predictions = prediction_model(embeddings)
+        predictions: np.ndarray = prediction_model(embeddings)
+
         return predictions
 
     def calculate_prediction_metric(self, audio_feature: str, category: int = 0) -> tuple | float:
@@ -134,17 +144,20 @@ class AudioAnalyzer:
         Returns:
             tuple | float: _description_
         """
-        audio_config = self.__get_audio_feature_config(audio_feature)
-        predictions = self.get_predictions(audio_feature)
-        probability_cutoff = 0.5
+        audio_config: dict = self.__get_audio_feature_config(audio_feature)
+        predictions: np.ndarray = self.get_predictions(audio_feature)
+        probability_cutoff: float = 0.5
 
         if audio_config["algorithm"] == "regression":
-            avg_predictions = np.mean(predictions, axis=0)
+            avg_predictions: np.ndarray = np.mean(predictions, axis=0)
+
             return tuple(avg_predictions)
         elif audio_config["algorithm"] == "classifier":
             try:
-                count = np.sum(predictions[:, category] > probability_cutoff)
-                ratio = float(count / len(predictions))
-                return ratio
+                count: np.int64 = np.sum(
+                    predictions[:, category] > probability_cutoff)
+                ratio: float = float(count / len(predictions))
             except (IndexError, KeyError):
                 print(f"Column {category} does not exist.")
+            else:
+                return ratio
