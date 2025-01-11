@@ -123,8 +123,8 @@ class AudioAnalyzer:
         return parameters[audio_feature]
 
     def get_predictions(self, audio_feature: str) -> np.ndarray:
-        """ Calculate predictions of an audio feature
-            https://essentia.upf.edu/models.html for meaning of values, e.g. 
+        """ Calculate predictions of an audio feature.
+            See https://essentia.upf.edu/models.html for meaning of values, e.g. 
             first column happy, second column non_happy
         Args:
             audio_feature (str): Name of the audio feature, e.g. danceability
@@ -220,3 +220,9 @@ class AudioAnalyzer:
         # Save as in an instance variable
         self.song_info: dict = audio_info
         return audio_info
+
+
+if __name__ == "__main__":
+    file_path: Path = Path.cwd().joinpath("..", "music", "happy_male_voice.mp3")
+    audio_analyzer: AudioAnalyzer = AudioAnalyzer(file_path)
+    print(audio_analyzer.get_complete_song_info())

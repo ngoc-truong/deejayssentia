@@ -2,3 +2,5 @@ essentia-tensorflow
 numpy<2
 mutagen
 pytest
+psycopg[binary]
+python-dotenv
