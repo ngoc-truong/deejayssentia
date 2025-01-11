@@ -5,7 +5,8 @@ import json
 
 
 class AudioAnalyzer:
-    """A class to analyze audio files, e.g. getting audio track features like valence, danceability, aggressiveness.
+    """ A class to analyze audio files, e.g. getting audio track features like valence, 
+        danceability, aggressiveness.
     """
 
     def __init__(self, file_path: str | Path):
@@ -15,6 +16,7 @@ class AudioAnalyzer:
         script_dir: Path = Path(__file__).parent
         self.__model_path: Path = script_dir.joinpath("models")
         self.__audio: MonoLoader = self.__get_essentia_audio()
+        self.__song_info: dict = None
 
     @property
     def file_path(self):
@@ -31,8 +33,16 @@ class AudioAnalyzer:
             raise FileNotFoundError(f"The file '{abs_path}' does not exist")
         self.__file_path: str = str(abs_path)
 
+    @property
+    def song_info(self):
+        return self.__song_info
+
+    @song_info.setter
+    def song_info(self, new_song_info: dict) -> None:
+        self.__song_info: dict = new_song_info
+
     def get_metadata(self) -> dict:
-        """Get the metadata of a song
+        """Get the metadata of a song.
 
         Returns:
             dict: key and value of the metadata, e.g. {"album": "The Wildest!"}
@@ -55,7 +65,8 @@ class AudioAnalyzer:
             return metadata
 
     def get_rhythm_data(self) -> dict:
-        """Get the rhythm data of a song, e.g. bpm, beats, beats_confidence, _, beats_intervals
+        """ Get the rhythm data of a song, e.g. bpm, beats, beats_confidence, _, 
+            beats_intervals.
 
         Returns:
             dict: rhythm data, e.g. {"bpm": 140}
@@ -83,11 +94,12 @@ class AudioAnalyzer:
         return MonoLoader(filename=self.__file_path,
                           sampleRate=16000, resampleQuality=4)()
 
-    def __get_audio_feature_config(self, audio_feature: str) -> dict:
-        """Get the model name and graph filenames used for prediction of an audio feature
-
+    def get_audio_feature_config(self) -> dict:
+        """ Get the whole audio feature config for all audio features (e.g. danceability, 
+            aggressiveness). It contains values like model (effnet, musicnn), algorithm 
+            (regression, classifier) and file path names.
         Returns:
-            float: _description_
+            dict: Configuration values for all audio features
         """
         script_dir: Path = Path(__file__).parent
         config_json: Path = script_dir.joinpath(
@@ -97,20 +109,31 @@ class AudioAnalyzer:
             with open(config_json, "r") as file:
                 parameters: dict = json.load(file)
 
-            return parameters[audio_feature]
+            return parameters
         except FileNotFoundError:
             print(f"The file {config_json} could not be found, sadness!")
 
+    def __get_single_audio_feature_config(self, audio_feature: str) -> dict:
+        """Get the model name and graph filenames used for prediction of an audio feature.
+
+        Returns:
+            dict: Config parameters (e.g. graph filename) for one audio feature, e.g. danceability
+        """
+        parameters = self.get_audio_feature_config()
+        return parameters[audio_feature]
+
     def get_predictions(self, audio_feature: str) -> np.ndarray:
-        """Calculate predictions of an audio feature
-            https://essentia.upf.edu/models.html for meaning of values, e.g. first column happy, second column non_happy
+        """ Calculate predictions of an audio feature
+            https://essentia.upf.edu/models.html for meaning of values, e.g. 
+            first column happy, second column non_happy
         Args:
             audio_feature (str): Name of the audio feature, e.g. danceability
 
         Returns:
             np.ndarray: Predictions for each segment of a song
         """
-        audio_config: dict = self.__get_audio_feature_config(audio_feature)
+        audio_config: dict = self.__get_single_audio_feature_config(
+            audio_feature)
 
         embedding_graph_file_path: str = str(Path.joinpath(
             self.__model_path, audio_config["embedding_graph_filename"]))
@@ -144,9 +167,9 @@ class AudioAnalyzer:
         return predictions
 
     def calculate_prediction_metric(self, audio_feature: str, category: int = 0) -> tuple | float:
-        """ Calculate a single prediction metric from several predictions (for each segment in a song)
-            e.g. a ratio for classifiers (e.g. danceable/non-danceable ratio)
-            or a mean for regression
+        """ Calculate a single prediction metric from several predictions 
+            (for each segment in a song) e.g. a ratio for classifiers (e.g. 
+            danceable/non-danceable ratio) or a mean for regression
 
         Args:
             audio_feature (str): Name of the audio feature
@@ -157,7 +180,8 @@ class AudioAnalyzer:
         Returns:
             tuple | float: _description_
         """
-        audio_config: dict = self.__get_audio_feature_config(audio_feature)
+        audio_config: dict = self.__get_single_audio_feature_config(
+            audio_feature)
         predictions: np.ndarray = self.get_predictions(audio_feature)
         probability_cutoff: float = 0.5
 
@@ -175,3 +199,24 @@ class AudioAnalyzer:
                 return ratio
             except IndexError:
                 print(f"Column {category} does not exist.")
+
+    def get_complete_song_info(self) -> dict:
+        """ Get all song information, namely metadata and audio feature 
+            predictions (e.g. danceability) 
+
+        Returns:
+            dict: Metadata and song features (e.g. danceability)
+        """
+        # metadata
+        audio_info: dict = self.get_metadata()
+
+        # audio feature predictions
+        audio_feature_config: dict = self.get_audio_feature_config()
+        audio_features = list(audio_feature_config.keys())
+        predictions: dict = {feature: self.calculate_prediction_metric(
+            feature) for feature in audio_features}
+
+        audio_info.update(predictions)
+        # Save as in an instance variable
+        self.song_info: dict = audio_info
+        return audio_info
