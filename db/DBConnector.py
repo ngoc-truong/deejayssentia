@@ -7,6 +7,9 @@ load_dotenv()
 
 
 class DBConnector:
+    """A class to interact with a PostgreSQL database (e.g. create and drop tables).
+    """
+
     def __init__(self):
         self.__DB_NAME: str = os.getenv("DB_NAME")
         self.__DB_USER: str = os.getenv("DB_USER")
@@ -94,8 +97,3 @@ class DBConnector:
                 """)
 
                 conn.commit()
-
-
-if __name__ == "__main__":
-    db_connector: DBConnector = DBConnector()
-    db_connector.drop_table("test")
