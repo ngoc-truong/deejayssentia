@@ -26,7 +26,7 @@ class DBConnector:
                 try:
                     cur.execute("""
                                 CREATE TABLE IF NOT EXISTS song (
-                                    id UUID PRIMARY KEY,
+                                    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
                                     comment TEXT,
                                     title TEXT NOT NULL,
                                     valence FLOAT,
@@ -49,14 +49,14 @@ class DBConnector:
 
                     cur.execute("""
                                 CREATE TABLE IF NOT EXISTS artist (
-                                    id UUID PRIMARY KEY,
+                                    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
                                     name TEXT NOT NULL
                                 );
                                 """)
 
                     cur.execute("""
                                 CREATE TABLE IF NOT EXISTS album (
-                                    id UUID PRIMARY KEY,
+                                    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
                                     title TEXT NOT NULL,
                                     date DATE
                                 )
@@ -64,7 +64,7 @@ class DBConnector:
 
                     cur.execute("""
                                 CREATE TABLE IF NOT EXISTS song_album (
-                                    id UUID PRIMARY KEY,
+                                    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
                                     song_id UUID REFERENCES song(id) ON DELETE CASCADE, 
                                     album_id UUID REFERENCES album(id) ON DELETE CASCADE, 
                                     tracknumber INT
@@ -73,7 +73,7 @@ class DBConnector:
 
                     cur.execute("""
                                 CREATE TABLE IF NOT EXISTS song_artist (
-                                    id UUID PRIMARY KEY,
+                                    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
                                     song_id UUID REFERENCES song(id) ON DELETE CASCADE, 
                                     artist_id UUID REFERENCES artist(id) ON DELETE CASCADE
                                 )
@@ -81,7 +81,7 @@ class DBConnector:
 
                     cur.execute("""
                                 CREATE TABLE IF NOT EXISTS album_artist (
-                                    id UUID PRIMARY KEY,
+                                    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
                                     album_id UUID REFERENCES album(id) ON DELETE CASCADE, 
                                     artist_id UUID REFERENCES artist(id) ON DELETE CASCADE
                                 )
@@ -111,116 +111,248 @@ class DBConnector:
         Args:
             song_dict (dict): Song data, e.g. album, artist, rhythm data, audio features
         """
-        self.add_song(song_dict)
-        self.add_album(song_dict)
-        self.add_artist(song_dict)
+        song_id: uuid.UUID = self.add_song(song_dict)
+        album_id: uuid.UUID = self.add_album(song_dict)
+        artist_id: uuid.UUID = self.add_artist(song_dict)
 
-    def add_song(self, song_dict: dict) -> None:
+        # TODO: If e.g. artist already exists in the database, get him/her and use their uuid instead
+        self.add_to_relational_table(
+            "song_album", "song", song_id, "album", album_id)
+        self.add_to_relational_table(
+            "song_artist", "song", song_id, "artist", artist_id)
+        self.add_to_relational_table(
+            "album_artist", "album", album_id, "artist", artist_id)
+
+    def add_song(self, song_dict: dict) -> uuid.UUID | None:
         """Add a song to the song table of the PostgreSQL database.
 
         Args:
             song_dict (dict): Song data, e.g. album, artist, rhythm data, audio features
+
+        Returns:
+            uuid.UUID | None: The UUID of the inserted song
         """
         with psycopg.connect(f"dbname={self.__DB_NAME} user={self.__DB_USER} password={self.__DB_PASSWORD} host={self.__DB_HOST} port={self.__DB_PORT}") as conn:
             with conn.cursor() as cur:
+                # Check whether the song already exists
+                columns = ["title", "happy_non_happy", "sad_non_sad"]
+                if song_id := self.is_already_in_table("song", columns, song_dict):
+                    return song_id
+
+                # Song does not exist so we want to insert it into the song table
                 try:
-                    # Select the correct values to insert into database
-                    values = [uuid.uuid4()]
-
-                    for key, value in song_dict.items():
-                        if key not in ["album", "artist", "date", "tracknumber"]:
-                            if key == "valence_arousal":
-                                values.append(value[0])
-                                values.append(value[1])
-                            else:
-                                values.append(value)
-
-                    # Add WHERE NOT clauses
-                    values.append(song_dict["title"])
-                    print(values)
-
                     # Get the column names from song table
                     cur.execute("SELECT * FROM song LIMIT 0")
                     column_names: list = [description[0]
                                           for description in cur.description]
-                    sql_column_names = "(" + ", ".join(column_names) + ")"
-                    sql_statement = f""" 
-                                        INSERT INTO song {sql_column_names}
-                                        SELECT %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                                        WHERE NOT EXISTS (SELECT * FROM song WHERE title = %s)
-                                    """
-                    cur.execute(sql_statement, values)
-                    print(
-                        f'Adding song {song_dict["title"]} to the database successful!')
+                    sql_column_names: str = f'({", ".join(column_names)})'
+                    sql_values_placeholders: str = f'({", ".join(["%s" for _ in column_names])})'
+                    sql_insert_statement: str = f""" 
+                                                    INSERT INTO song {sql_column_names}
+                                                    VALUES {sql_values_placeholders}
+                                                    RETURNING id;
+                                                """
+
+                    # Select the correct values to insert into database
+                    sql_insert_values = [uuid.uuid4()]
+
+                    for key, value in song_dict.items():
+                        if key not in ["album", "artist", "date", "tracknumber"]:
+                            if key == "valence_arousal":
+                                sql_insert_values.append(value[0])
+                                sql_insert_values.append(value[1])
+                            else:
+                                sql_insert_values.append(value)
+
+                    cur.execute(sql_insert_statement, sql_insert_values)
+                    inserted_row: tuple = cur.fetchone()
+
+                    # Return song_id
+                    if inserted_row:
+                        song_id: uuid.UUID = inserted_row[0]
+                        print(
+                            f'Adding the song {song_dict["title"]} with id {song_id} to the database successful!')
+                        return song_id
+                    return None
                 except Exception as e:
                     print(
-                        f'Adding a song {song_dict["title"]} did not work:', e)
+                        f'Adding the song {song_dict["title"]} did not work:', e)
+                    return None
 
-    def add_album(self, song_dict: dict) -> None:
+    def add_album(self, song_dict: dict) -> uuid.UUID | None:
         """Add an album to the album table of the PostgreSQL database.
 
         Args:
             song_dict (dict): Song data, e.g. album, artist, rhythm data, audio features
+
+        Returns:
+            uuid.UUID | None: The UUID of the inserted album
         """
         with psycopg.connect(f"dbname={self.__DB_NAME} user={self.__DB_USER} password={self.__DB_PASSWORD} host={self.__DB_HOST} port={self.__DB_PORT}") as conn:
             with conn.cursor() as cur:
+                # Check whether the album already exists
+                columns = ["album", "date"]
+                if album_id := self.is_already_in_table("album", columns, song_dict):
+                    return album_id
+
+                # Album does not exist so insert into the album table
                 try:
-                    cur.execute(""" INSERT INTO album (id, title, date)
-                                    SELECT %s, %s, %s
-                                    WHERE NOT EXISTS (SELECT * FROM album WHERE title = %s AND date = %s)
-                                """,
-                                (uuid.uuid4(),
-                                 song_dict["album"],
-                                 date(int(song_dict["date"]), 1, 1),
-                                 song_dict["album"],
-                                 date(int(song_dict["date"]), 1, 1)))
-                    print(
-                        f'Adding the album {song_dict["album"]} to the database was successful!')
+                    sql_statement: str = """ 
+                                            INSERT INTO album (title, date)
+                                            VALUES (%s, %s)
+                                            RETURNING id;
+                                        """
+                    sql_values = [song_dict["album"], date(
+                        int(song_dict["date"]), 1, 1)]
+                    cur.execute(sql_statement, sql_values)
+                    inserted_row: tuple = cur.fetchone()
+
+                    if inserted_row:
+                        album_id: uuid.UUID = inserted_row[0]
+                        print(
+                            f'Adding the album {song_dict["album"]} with id {album_id} to the database was successful!')
+                        return album_id
+                    else:
+                        print(
+                            f'The album {song_dict["album"]} already exists')
+                        return None
                 except Exception as e:
                     print(
                         f'Adding an album {song_dict["album"]} did not work:', e)
+                    return None
 
-    def add_artist(self, song_dict: dict) -> None:
+    def add_artist(self, song_dict: dict) -> uuid.UUID | None:
         """Add an artist to the artist table of the PostgreSQL database.
 
         Args:
             song_dict (dict): Song data, e.g. album, artist, rhythm data, audio features
+
+        Returns:
+            uuid.UUID | None: The UUID of the inserted artist
         """
         with psycopg.connect(f"dbname={self.__DB_NAME} user={self.__DB_USER} password={self.__DB_PASSWORD} host={self.__DB_HOST} port={self.__DB_PORT}") as conn:
             with conn.cursor() as cur:
+                # Check whether artist already exists
+                columns = ["artist"]
+                if artist_id := self.is_already_in_table("artist", columns, song_dict):
+                    return artist_id
+
+                # Artist does not exist so insert into the artist table
                 try:
-                    cur.execute(f"""INSERT INTO artist (id, name)
-                                    SELECT %s, %s
-                                    WHERE NOT EXISTS (SELECT 1 FROM artist WHERE name = %s)
-                                """,
-                                (uuid.uuid4(),
-                                 song_dict["artist"],
-                                 song_dict["artist"]))
-                    print(
-                        f'Adding the artist {song_dict["artist"]} to the database was successful!')
+                    sql_statement: str = """
+                                            INSERT into artist (name)
+                                            VALUES (%s)
+                                            RETURNING id;
+                                         """
+                    sql_values = [song_dict["artist"]]
+                    cur.execute(sql_statement, sql_values)
+                    inserted_row: tuple = cur.fetchone()
+
+                    if inserted_row:
+                        artist_id: uuid.UUID = inserted_row[0]
+                        print(
+                            f'Adding the artist {song_dict["artist"]} with id {artist_id} to the database was successful!')
+                        return artist_id
+                    else:
+                        print(
+                            f'The artist {song_dict["artist"]} already exists!')
+                        return None
                 except Exception as e:
                     print(
                         f'Adding artist {song_dict["artist"]} did not work:', e)
+                    return None
 
-    def create_unique_index(self, table_name: str, columns: list[str]) -> None:
-        """Create a unique index for columns in a table. Important for ON CONFLICT sql statements.
+    def add_to_relational_table(self, rel_table: str, first_table: str, first_id: uuid.UUID, second_table: str, second_id: uuid.UUID) -> uuid.UUID | None:
+        """Add a relationship into the relational table, e.g. song and album into song_album table.
 
         Args:
-            table_name (str): Name of the table, e.g. song
-            columns (list[str]): A list of columns in the table, e.g. [comment, date, title]
+            rel_table (dict): Name of the relational table, e.g. song_album
+            first_table (str): Name of the first table, e.g. song
+            first_id (uuid.UUID): UUID of the first table row to insert, e.g. song_id
+            second_table (str): Name of the second table, e.g. album
+            second_id (uuid.UUID): UUID of the second table row to insert, e.g. album_id
+            song_dict (dict): All provided song information
+
+        Returns:
+            uuid.UUID | None: The UUID of the inserted artist
         """
-        columns_string = ", ".join(columns)
-        name_of_index = f"idx_{table_name}_" + "_".join(columns)
         with psycopg.connect(f"dbname={self.__DB_NAME} user={self.__DB_USER} password={self.__DB_PASSWORD} host={self.__DB_HOST} port={self.__DB_PORT}") as conn:
             with conn.cursor() as cur:
                 try:
-                    cur.execute(
-                        f"CREATE UNIQUE INDEX {name_of_index} ON {table_name} ({columns_string});")
-                    print(
-                        f'Creating a unique index for "{table_name}" was successfull!')
+                    cur.execute(f"""INSERT INTO {rel_table} ({first_table}_id, {second_table}_id)
+                                    SELECT %s, %s
+                                    WHERE NOT EXISTS (SELECT * FROM {rel_table} WHERE {first_table}_id = %s AND {second_table}_id = %s)
+                                    RETURNING id;
+                                """,
+                                (first_id, second_id, first_id, second_id))
+
+                    inserted_row: tuple = cur.fetchone()
+                    if inserted_row:
+                        rel_table_id: uuid.UUID = inserted_row[0]
+                        print(
+                            f'Adding the relation between {first_table} and {second_table} into {rel_table_id} successful')
+                        return rel_table_id
+                    else:
+                        print(
+                            f'The relationship {rel_table} already exists')
                 except Exception as e:
-                    print(
-                        f'Creating a unique index for "{table_name}" did not work:', e)
+                    print(e)
+
+    def is_already_in_table(self, table_name: str, columns: list[str], song_dict: dict) -> uuid.UUID:
+        """Check whether a row is already in the database. If yes, it will return the UUID.
+
+        Args:
+            table_name (str): Name of the table, e.g. song
+            columns (list[str]): Columns for the WHERE condition, e.g. title, happy_not_happy, danceable_not_danceable
+            song_dict (dict): The data on which we check whether it is in the database
+
+        Returns:
+            uuid.UUID: If the row is in the database we return the UUID of it.
+        """
+        sql_columns_mapping = {
+            "album": "title",
+            "artist": "name"
+        }
+
+        with psycopg.connect(f"dbname={self.__DB_NAME} user={self.__DB_USER} password={self.__DB_PASSWORD} host={self.__DB_HOST} port={self.__DB_PORT}") as conn:
+            with conn.cursor() as cur:
+                try:
+                    # Create sql statement, e.g. "SELECT id FROM..." and condition, e.g. "WHERE title = %s AND date = %s"
+                    conditions = []
+
+                    for column in columns:
+                        if column in sql_columns_mapping:
+                            conditions.append(
+                                f"{sql_columns_mapping[column]} = %s")
+                        else:
+                            conditions.append(f"{column} = %s")
+
+                    sql_condition: str = " AND ".join(conditions)
+                    sql_statement: str = f"SELECT id FROM {table_name} WHERE {sql_condition}"
+
+                    # Get the values for the sql WHERE condition
+                    sql_select_values: list = []
+
+                    # Check for date objects
+                    for key in song_dict:
+                        if key in columns:
+                            if key == "date":
+                                sql_select_values.append(
+                                    date(int(song_dict[key]), 1, 1))
+                            else:
+                                sql_select_values.append(song_dict[key])
+
+                    cur.execute(sql_statement, sql_select_values)
+                    result: tuple = cur.fetchone()
+                    if result:
+                        print(
+                            f'The {table_name} with the column {song_dict[columns[0]]} already exists.')
+                        id: uuid.UUID = result[0]
+                        return id
+                    return None
+                except Exception as e:
+                    print("An error occurred while looking at the database:", e)
+                    return None
 
     def delete_all_entries(self, table_name: str) -> None:
         """Delete all entries from a table, e.g. all rows in "song" table.
@@ -234,28 +366,3 @@ class DBConnector:
                     cur.execute(f"DELETE FROM {table_name};")
                 except Exception as e:
                     print(f'Could not delete entries in "{table_name}"')
-
-
-if __name__ == "__main__":
-    song_dict = {'album': 'Satch Plays Fats', 'artist': 'Louis Armstrong', 'comment:n': 'Converted by https://spotifydown.com', 'date': '1955', 'title': "I'm Crazy 'Bout My Baby - Edit", 'tracknumber': '', 'valence_arousal': (
-        5.886054, 5.5037227), 'danceable_not_danceable': 0.19786096256684493, 'aggressive_non_aggressive': 0.0, 'happy_non_happy': 0.09090909090909091, 'party_non_party': 0.7165775401069518, 'relaxed_non_relaxed': 0.0, 'sad_non_sad': 0.18085106382978725, 'acoustic_non_acoustic': 0.475177304964539, 'electronic_non_electronic': 0.0, 'instrumental_voice': 0.3333333333333333, 'female_male': 0.19858156028368795, 'bright_dark': 0.014184397163120567, 'acoustic_electronic': 0.014184397163120567, 'dry_wet': 0.7553191489361702}
-    db_connector = DBConnector()
-
-    # Deleting all entries
-    # db_connector.delete_all_entries("song")
-    # db_connector.delete_all_entries("album")
-    # db_connector.delete_all_entries("artist")
-
-    # Deleting all tables
-    # db_connector.drop_table("song")
-    # db_connector.drop_table("album")
-    # db_connector.drop_table("artist")
-    # db_connector.drop_table("song_album")
-    # db_connector.drop_table("song_artist")
-    # db_connector.drop_table("album_artist")
-
-    # Creating tables
-    # db_connector.create_tables()
-
-    # Add data
-    db_connector.add_data(song_dict)
