@@ -122,7 +122,7 @@ class DBConnector:
         self.add_relation(
             "album_artist", "album", album_id, "artist", artist_id)
 
-    def add_song(self, song_dict: dict) -> uuid.UUID | None:
+    def add_song(self, song_dict: dict) -> uuid.UUID:
         """Add a song to the song table of the database.
 
         Args:
@@ -178,7 +178,7 @@ class DBConnector:
                         f'Adding the song {song_dict["title"]} did not work:', e)
                     return None
 
-    def add_album(self, song_dict: dict) -> uuid.UUID | None:
+    def add_album(self, song_dict: dict) -> uuid.UUID:
         """Add an album to the album table of the PostgreSQL database.
 
         Args:
@@ -220,7 +220,7 @@ class DBConnector:
                         f'Adding an album {song_dict["album"]} did not work:', e)
                     return None
 
-    def add_artist(self, song_dict: dict) -> uuid.UUID | None:
+    def add_artist(self, song_dict: dict) -> uuid.UUID:
         """Add an artist to the artist table of the PostgreSQL database.
 
         Args:
