@@ -122,7 +122,7 @@ class DBConnector:
         self.add_relation(
             "album_artist", "album", album_id, "artist", artist_id)
 
-    def add_song(self, song_dict: dict) -> uuid.UUID:
+    def add_song(self, song_dict: dict) -> uuid.UUID | None:
         """Add a song to the song table of the database.
 
         Args:
@@ -135,13 +135,18 @@ class DBConnector:
             with conn.cursor() as cur:
                 # Check whether the song already exists
                 columns = ["title", "happy_non_happy", "sad_non_sad"]
+
                 if song_id := self.is_row_in_table("song", columns, song_dict):
                     return song_id
 
                 # Song does not exist so we want to insert it into the song table
                 try:
-                    # Get the column names from song table
                     cur.execute("SELECT * FROM song LIMIT 0;")
+                except Exception as e:
+                    print("An error occurred while connecting to the song table:", e)
+                    return None
+                else:
+                    # Get column names from the song table
                     column_names: list = [description[0]
                                           for description in cur.description]
                     sql_column_names: str = f'({", ".join(column_names)})'
@@ -163,22 +168,19 @@ class DBConnector:
                             else:
                                 sql_insert_values.append(value)
 
+                try:
                     cur.execute(sql_insert_statement, sql_insert_values)
-                    inserted_row: tuple = cur.fetchone()
-
-                    # Return song_id
-                    if inserted_row:
-                        song_id: uuid.UUID = inserted_row[0]
-                        print(
-                            f'Adding the song {song_dict["title"]} with id {song_id} to the database successful!')
-                        return song_id
-                    return None
                 except Exception as e:
                     print(
-                        f'Adding the song {song_dict["title"]} did not work:', e)
+                        f'Adding the song "{song_dict["title"]}" did not work:', e)
                     return None
+                else:
+                    song_id = cur.fetchone()[0]
+                    print(
+                        f'Adding the song "{song_dict["title"]}" with id "{song_id}" to the database successful!')
+                    return song_id
 
-    def add_album(self, song_dict: dict) -> uuid.UUID:
+    def add_album(self, song_dict: dict) -> uuid.UUID | None:
         """Add an album to the album table of the PostgreSQL database.
 
         Args:
@@ -195,32 +197,31 @@ class DBConnector:
                     return album_id
 
                 # Album does not exist so insert into the album table
+                sql_statement: str = """ 
+                                        INSERT INTO album (title, date)
+                                        VALUES (%s, %s)
+                                        RETURNING id;
+                                    """
                 try:
-                    sql_statement: str = """ 
-                                            INSERT INTO album (title, date)
-                                            VALUES (%s, %s)
-                                            RETURNING id;
-                                        """
                     sql_values = [song_dict["album"], date(
                         int(song_dict["date"]), 1, 1)]
-                    cur.execute(sql_statement, sql_values)
-                    inserted_row: tuple = cur.fetchone()
-
-                    if inserted_row:
-                        album_id: uuid.UUID = inserted_row[0]
-                        print(
-                            f'Adding the album {song_dict["album"]} with id {album_id} to the database was successful!')
-                        return album_id
-                    else:
-                        print(
-                            f'The album {song_dict["album"]} already exists')
-                        return None
-                except Exception as e:
+                except KeyError as e:
                     print(
-                        f'Adding an album {song_dict["album"]} did not work:', e)
+                        f'The key "album" does not exist in the dictionary: {song_dict}')
                     return None
 
-    def add_artist(self, song_dict: dict) -> uuid.UUID:
+                try:
+                    cur.execute(sql_statement, sql_values)
+                except Exception as e:
+                    print(f"An error occured while connecting to the database:", e)
+                    return None
+                else:
+                    album_id: tuple = cur.fetchone()[0]
+                    print(
+                        f'Adding the album "{song_dict["album"]}" with id "{album_id}" to the database was successful!')
+                    return album_id
+
+    def add_artist(self, song_dict: dict) -> uuid.UUID | None:
         """Add an artist to the artist table of the PostgreSQL database.
 
         Args:
@@ -237,29 +238,27 @@ class DBConnector:
                     return artist_id
 
                 # Artist does not exist so insert into the artist table
+                sql_statement: str = """
+                                        INSERT into artist (name)
+                                        VALUES (%s)
+                                        RETURNING id;
+                                        """
                 try:
-                    sql_statement: str = """
-                                            INSERT into artist (name)
-                                            VALUES (%s)
-                                            RETURNING id;
-                                         """
                     sql_values = [song_dict["artist"]]
-                    cur.execute(sql_statement, sql_values)
-                    inserted_row: tuple = cur.fetchone()
-
-                    if inserted_row:
-                        artist_id: uuid.UUID = inserted_row[0]
-                        print(
-                            f'Adding the artist {song_dict["artist"]} with id {artist_id} to the database was successful!')
-                        return artist_id
-                    else:
-                        print(
-                            f'The artist {song_dict["artist"]} already exists!')
-                        return None
-                except Exception as e:
-                    print(
-                        f'Adding artist {song_dict["artist"]} did not work:', e)
+                except KeyError as e:
+                    print(f'The key "artist" does not exist.')
                     return None
+
+                try:
+                    cur.execute(sql_statement, sql_values)
+                except Exception as e:
+                    print("Could not execute sql statement:", sql_statement)
+                    return None
+                else:
+                    artist_id: tuple = cur.fetchone()[0]
+                    print(
+                        f'Adding the artist "{song_dict["artist"]}" with id "{artist_id}" to the database was successful!')
+                    return artist_id
 
     def add_relation(self, rel_table: str, first_table: str, first_id: uuid.UUID, second_table: str, second_id: uuid.UUID) -> uuid.UUID:
         """Add a relationship into the relational table, e.g. song_id and album_id into song_album table.
@@ -282,28 +281,25 @@ class DBConnector:
                     return relation_id
 
                 # The relation does not exist so insert it into the relation table
+                sql_statement: str = f"""
+                                        INSERT into {rel_table} ({first_table}_id, {second_table}_id)
+                                        VALUES (%s, %s)
+                                        RETURNING id;
+                                        """
+                sql_values = [first_id, second_id]
+
                 try:
-                    sql_statement: str = f"""
-                                            INSERT into {rel_table} ({first_table}_id, {second_table}_id)
-                                            VALUES (%s, %s)
-                                            RETURNING id;
-                                         """
-                    sql_values = [first_id, second_id]
                     cur.execute(sql_statement, sql_values)
-
-                    inserted_row: tuple = cur.fetchone()
-                    if inserted_row:
-                        rel_table_id: uuid.UUID = inserted_row[0]
-                        print(
-                            f'Adding the relation between {first_table} and {second_table} into {rel_table_id} successful')
-                        return rel_table_id
-                    else:
-                        print(
-                            f'The relationship {rel_table} already exists')
                 except Exception as e:
-                    print(e)
+                    print("An error occured while inserting into the database:", e)
+                    return None
+                else:
+                    rel_table_id: tuple = cur.fetchone()[0]
+                    print(
+                        f'Adding the relation between {first_table} and {second_table} into {rel_table_id} successful')
+                    return rel_table_id
 
-    def is_row_in_table(self, table_name: str, columns: list[str], song_dict: dict) -> uuid.UUID:
+    def is_row_in_table(self, table_name: str, columns: list[str], song_dict: dict) -> uuid.UUID | None:
         """Check whether a row is already in a table. If yes return its UUID.
 
         Args:
@@ -319,47 +315,45 @@ class DBConnector:
             "artist": "name"
         }
 
+        conditions = []
+        for column in columns:
+            if column in sql_columns_mapping:
+                conditions.append(
+                    f"{sql_columns_mapping[column]} = %s")
+            else:
+                conditions.append(f"{column} = %s")
+
+        # Create sql statement, e.g. "SELECT id FROM..." and condition, e.g. "WHERE title = %s AND date = %s"
+        sql_condition: str = " AND ".join(conditions)
+        sql_statement: str = f"SELECT id FROM {table_name} WHERE {sql_condition}"
+
+        # Get the values for the sql WHERE condition
+        sql_values: list = []
+        for key in song_dict:
+            if key in columns:
+                # Check for date objects
+                if key == "date":
+                    sql_values.append(
+                        date(int(song_dict[key]), 1, 1))
+                else:
+                    sql_values.append(song_dict[key])
+
         with psycopg.connect(f"dbname={self.__DB_NAME} user={self.__DB_USER} password={self.__DB_PASSWORD} host={self.__DB_HOST} port={self.__DB_PORT}") as conn:
             with conn.cursor() as cur:
                 try:
-                    # Create sql statement, e.g. "SELECT id FROM..." and condition, e.g. "WHERE title = %s AND date = %s"
-                    conditions = []
-
-                    for column in columns:
-                        if column in sql_columns_mapping:
-                            conditions.append(
-                                f"{sql_columns_mapping[column]} = %s")
-                        else:
-                            conditions.append(f"{column} = %s")
-
-                    sql_condition: str = " AND ".join(conditions)
-                    sql_statement: str = f"SELECT id FROM {table_name} WHERE {sql_condition}"
-
-                    # Get the values for the sql WHERE condition
-                    sql_values: list = []
-                    for key in song_dict:
-                        if key in columns:
-                            # Check for date objects
-                            if key == "date":
-                                sql_values.append(
-                                    date(int(song_dict[key]), 1, 1))
-                            else:
-                                sql_values.append(song_dict[key])
-
                     cur.execute(sql_statement, sql_values)
+                except Exception as e:
+                    print("An error occurred while looking at the database:", e)
+                else:
                     result: tuple = cur.fetchone()
-
                     if result:
                         print(
                             f'The {table_name} with the column {song_dict[columns[0]]} already exists.')
                         id: uuid.UUID = result[0]
                         return id
                     return None
-                except Exception as e:
-                    print("An error occurred while looking at the database:", e)
-                    return None
 
-    def is_relation_in_table(self, rel_table: str, first_table: str, first_id: uuid.UUID, second_table: str, second_id: uuid.UUID) -> uuid.UUID:
+    def is_relation_in_table(self, rel_table: str, first_table: str, first_id: uuid.UUID, second_table: str, second_id: uuid.UUID) -> uuid.UUID | None:
         """Check whether a relation is already in the relation table (e.g. song_artist). If yes return its UUID.
 
         Args:
@@ -372,24 +366,23 @@ class DBConnector:
         Returns:
             uuid.UUID: UUID of the relationship, e.g. between a song and an artist
         """
+        sql_statement: str = f"SELECT id FROM {rel_table} WHERE {first_table}_id = %s AND {second_table}_id = %s;"
+        sql_values: list = [first_id, second_id]
 
         with psycopg.connect(f"dbname={self.__DB_NAME} user={self.__DB_USER} password={self.__DB_PASSWORD} host={self.__DB_HOST} port={self.__DB_PORT}") as conn:
             with conn.cursor() as cur:
                 try:
-                    sql_statement: str = f"SELECT id FROM {rel_table} WHERE {first_table}_id = %s AND {second_table}_id = %s;"
-                    sql_values: list = [first_id, second_id]
                     cur.execute(sql_statement, sql_values)
-                    result: tuple = cur.fetchone()
-
-                    if result:
-                        print(
-                            f'The relation between {first_table}:{first_id} and {second_table}:{second_id} already exists.')
-                        id: uuid.UUID = result[0]
-                        return id
-                    return None
                 except Exception as e:
                     print(
-                        f"An error occurred while looking at the {rel_table}:", e)
+                        f"An error occurred while selecting an entry from the {rel_table} table:", e)
+                else:
+                    result: tuple = cur.fetchone()
+                    if result:
+                        print(
+                            f'The relation between "{first_table}:{first_id}" and "{second_table}:{second_id}" already exists.')
+                        id = result[0]
+                        return id
                     return None
 
     def delete_all_entries(self, table_name: str) -> None:
