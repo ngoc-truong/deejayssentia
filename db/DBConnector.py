@@ -1,6 +1,6 @@
 import psycopg
 import os
-import uuid
+from uuid import uuid4, UUID
 from dotenv import load_dotenv
 from datetime import date
 
@@ -111,9 +111,9 @@ class DBConnector:
         Args:
             song_dict (dict): Song data, e.g. album, artist, rhythm data, audio features
         """
-        song_id: uuid.UUID = self.add_song(song_dict)
-        album_id: uuid.UUID = self.add_album(song_dict)
-        artist_id: uuid.UUID = self.add_artist(song_dict)
+        song_id: UUID = self.add_song(song_dict)
+        album_id: UUID = self.add_album(song_dict)
+        artist_id: UUID = self.add_artist(song_dict)
 
         self.add_relation(
             "song_album", "song", song_id, "album", album_id)
@@ -122,14 +122,14 @@ class DBConnector:
         self.add_relation(
             "album_artist", "album", album_id, "artist", artist_id)
 
-    def add_song(self, song_dict: dict) -> uuid.UUID | None:
+    def add_song(self, song_dict: dict) -> UUID | None:
         """Add a song to the song table of the database.
 
         Args:
             song_dict (dict): Song data, e.g. album, artist, rhythm data, audio features
 
         Returns:
-            uuid.UUID | None: The UUID of the inserted song
+            UUID | None: The UUID of the inserted song
         """
         with psycopg.connect(f"dbname={self.__DB_NAME} user={self.__DB_USER} password={self.__DB_PASSWORD} host={self.__DB_HOST} port={self.__DB_PORT}") as conn:
             with conn.cursor() as cur:
@@ -158,7 +158,7 @@ class DBConnector:
                                                 """
 
                     # Select the correct values to insert into database
-                    sql_insert_values = [uuid.uuid4()]
+                    sql_insert_values = [uuid4()]
 
                     for key, value in song_dict.items():
                         if key not in ["album", "artist", "date", "tracknumber"]:
@@ -180,14 +180,14 @@ class DBConnector:
                         f'Adding the song "{song_dict["title"]}" with id "{song_id}" to the database successful!')
                     return song_id
 
-    def add_album(self, song_dict: dict) -> uuid.UUID | None:
+    def add_album(self, song_dict: dict) -> UUID | None:
         """Add an album to the album table of the PostgreSQL database.
 
         Args:
             song_dict (dict): Song data, e.g. album, artist, rhythm data, audio features
 
         Returns:
-            uuid.UUID | None: The UUID of the inserted album
+            UUID | None: The UUID of the inserted album
         """
         with psycopg.connect(f"dbname={self.__DB_NAME} user={self.__DB_USER} password={self.__DB_PASSWORD} host={self.__DB_HOST} port={self.__DB_PORT}") as conn:
             with conn.cursor() as cur:
@@ -221,14 +221,14 @@ class DBConnector:
                         f'Adding the album "{song_dict["album"]}" with id "{album_id}" to the database was successful!')
                     return album_id
 
-    def add_artist(self, song_dict: dict) -> uuid.UUID | None:
+    def add_artist(self, song_dict: dict) -> UUID | None:
         """Add an artist to the artist table of the PostgreSQL database.
 
         Args:
             song_dict (dict): Song data, e.g. album, artist, rhythm data, audio features
 
         Returns:
-            uuid.UUID | None: The UUID of the inserted artist
+            UUID | None: The UUID of the inserted artist
         """
         with psycopg.connect(f"dbname={self.__DB_NAME} user={self.__DB_USER} password={self.__DB_PASSWORD} host={self.__DB_HOST} port={self.__DB_PORT}") as conn:
             with conn.cursor() as cur:
@@ -260,19 +260,19 @@ class DBConnector:
                         f'Adding the artist "{song_dict["artist"]}" with id "{artist_id}" to the database was successful!')
                     return artist_id
 
-    def add_relation(self, rel_table: str, first_table: str, first_id: uuid.UUID, second_table: str, second_id: uuid.UUID) -> uuid.UUID:
+    def add_relation(self, rel_table: str, first_table: str, first_id: UUID, second_table: str, second_id: UUID) -> UUID:
         """Add a relationship into the relational table, e.g. song_id and album_id into song_album table.
 
         Args:
             rel_table (dict): Name of the relational table, e.g. song_album
             first_table (str): Name of the first table, e.g. song
-            first_id (uuid.UUID): UUID of the first table row to insert, e.g. song_id
+            first_id (UUID): UUID of the first table row to insert, e.g. song_id
             second_table (str): Name of the second table, e.g. album
-            second_id (uuid.UUID): UUID of the second table row to insert, e.g. album_id
+            second_id (UUID): UUID of the second table row to insert, e.g. album_id
             song_dict (dict): All provided song information
 
         Returns:
-            uuid.UUID | None: The UUID of the inserted artist
+            UUID | None: The UUID of the inserted artist
         """
         with psycopg.connect(f"dbname={self.__DB_NAME} user={self.__DB_USER} password={self.__DB_PASSWORD} host={self.__DB_HOST} port={self.__DB_PORT}") as conn:
             with conn.cursor() as cur:
@@ -299,7 +299,7 @@ class DBConnector:
                         f'Adding the relation between {first_table} and {second_table} into {rel_table_id} successful')
                     return rel_table_id
 
-    def is_row_in_table(self, table_name: str, columns: list[str], song_dict: dict) -> uuid.UUID | None:
+    def is_row_in_table(self, table_name: str, columns: list[str], song_dict: dict) -> UUID | None:
         """Check whether a row is already in a table. If yes return its UUID.
 
         Args:
@@ -308,7 +308,7 @@ class DBConnector:
             song_dict (dict): The data on which we check whether it is in the database
 
         Returns:
-            uuid.UUID: If the row is in the table we return its UUID
+            UUID: If the row is in the table we return its UUID
         """
         sql_columns_mapping = {
             "album": "title",
@@ -322,8 +322,6 @@ class DBConnector:
                     f"{sql_columns_mapping[column]} = %s")
             else:
                 conditions.append(f"{column} = %s")
-
-        # Create sql statement, e.g. "SELECT id FROM..." and condition, e.g. "WHERE title = %s AND date = %s"
         sql_condition: str = " AND ".join(conditions)
         sql_statement: str = f"SELECT id FROM {table_name} WHERE {sql_condition}"
 
@@ -349,22 +347,22 @@ class DBConnector:
                     if result:
                         print(
                             f'The {table_name} with the column {song_dict[columns[0]]} already exists.')
-                        id: uuid.UUID = result[0]
+                        id: UUID = result[0]
                         return id
                     return None
 
-    def is_relation_in_table(self, rel_table: str, first_table: str, first_id: uuid.UUID, second_table: str, second_id: uuid.UUID) -> uuid.UUID | None:
+    def is_relation_in_table(self, rel_table: str, first_table: str, first_id: UUID, second_table: str, second_id: UUID) -> UUID | None:
         """Check whether a relation is already in the relation table (e.g. song_artist). If yes return its UUID.
 
         Args:
             rel_table (str): Name of the relational table, e.g. song_artist
             first_table (str): Name of the first table, e.g. song
-            first_id (uuid.UUID): UUID primary key of the first table, e.g. song_id
+            first_id (UUID): UUID primary key of the first table, e.g. song_id
             second_table (str): Name of the second table, e.g. artist
-            second_id (uuid.UUID): UUID of the second table, e.g. artist_id
+            second_id (UUID): UUID of the second table, e.g. artist_id
 
         Returns:
-            uuid.UUID: UUID of the relationship, e.g. between a song and an artist
+            UUID: UUID of the relationship, e.g. between a song and an artist
         """
         sql_statement: str = f"SELECT id FROM {rel_table} WHERE {first_table}_id = %s AND {second_table}_id = %s;"
         sql_values: list = [first_id, second_id]
@@ -381,7 +379,7 @@ class DBConnector:
                     if result:
                         print(
                             f'The relation between "{first_table}:{first_id}" and "{second_table}:{second_id}" already exists.')
-                        id = result[0]
+                        id: UUID = result[0]
                         return id
                     return None
 
