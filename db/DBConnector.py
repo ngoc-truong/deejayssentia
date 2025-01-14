@@ -1,8 +1,9 @@
-import psycopg
 import os
-from uuid import uuid4, UUID
-from dotenv import load_dotenv
+import psycopg
+
 from datetime import date
+from dotenv import load_dotenv
+from uuid import uuid4, UUID
 
 load_dotenv()
 
@@ -11,12 +12,12 @@ class DBConnector:
     """A class to interact with a PostgreSQL database (e.g. create, drop tables, insert into etc.).
     """
 
-    def __init__(self):
-        self.__DB_NAME: str = os.getenv("DB_NAME")
-        self.__DB_USER: str = os.getenv("DB_USER")
-        self.__DB_PASSWORD: str = os.getenv("DB_PASSWORD")
-        self.__DB_HOST: str = os.getenv("DB_HOST")
-        self.__DB_PORT: str = os.getenv("DB_PORT")
+    def __init__(self, db_name: str, db_user: str, db_password: str, db_host: str, db_port: str):
+        self.__DB_NAME: str = db_name
+        self.__DB_USER: str = db_user
+        self.__DB_PASSWORD: str = db_password
+        self.__DB_HOST: str = db_host
+        self.__DB_PORT: str = db_port
 
     def create_tables(self) -> None:
         """Create tables for song, artist and album.
@@ -24,6 +25,7 @@ class DBConnector:
         with psycopg.connect(f"dbname={self.__DB_NAME} user={self.__DB_USER} password={self.__DB_PASSWORD} host={self.__DB_HOST} port={self.__DB_PORT}") as conn:
             with conn.cursor() as cur:
                 try:
+                    cur.execute("BEGIN;")
                     cur.execute("""
                                 CREATE TABLE IF NOT EXISTS song (
                                     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -65,8 +67,8 @@ class DBConnector:
                     cur.execute("""
                                 CREATE TABLE IF NOT EXISTS song_album (
                                     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-                                    song_id UUID REFERENCES song(id) ON DELETE CASCADE, 
-                                    album_id UUID REFERENCES album(id) ON DELETE CASCADE, 
+                                    song_id UUID REFERENCES song(id) ON DELETE CASCADE,
+                                    album_id UUID REFERENCES album(id) ON DELETE CASCADE,
                                     tracknumber INT
                                 );
                                 """)
@@ -74,7 +76,7 @@ class DBConnector:
                     cur.execute("""
                                 CREATE TABLE IF NOT EXISTS song_artist (
                                     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-                                    song_id UUID REFERENCES song(id) ON DELETE CASCADE, 
+                                    song_id UUID REFERENCES song(id) ON DELETE CASCADE,
                                     artist_id UUID REFERENCES artist(id) ON DELETE CASCADE
                                 );
                                 """)
@@ -82,7 +84,7 @@ class DBConnector:
                     cur.execute("""
                                 CREATE TABLE IF NOT EXISTS album_artist (
                                     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-                                    album_id UUID REFERENCES album(id) ON DELETE CASCADE, 
+                                    album_id UUID REFERENCES album(id) ON DELETE CASCADE,
                                     artist_id UUID REFERENCES artist(id) ON DELETE CASCADE
                                 );
                                 """)
@@ -91,6 +93,16 @@ class DBConnector:
                     print("Creating database tables was succesfull!")
                 except Exception as e:
                     print("Creating database tables did not work:", e)
+                    conn.rollback()
+
+    def drop_tables(self, table_names: list) -> None:
+        """Drop all tables provided
+
+        Args:
+            table_names (list): List of table names to be dropped
+        """
+        for table in table_names:
+            self.drop_table(table)
 
     def drop_table(self, table_name: str) -> None:
         """Drop a table in the PostgreSQL database.
@@ -98,12 +110,13 @@ class DBConnector:
         with psycopg.connect(f"dbname={self.__DB_NAME} user={self.__DB_USER} password={self.__DB_PASSWORD} host={self.__DB_HOST} port={self.__DB_PORT}") as conn:
             with conn.cursor() as cur:
                 try:
+                    cur.execute("BEGIN;")
                     cur.execute(
                         f"""DROP TABLE IF EXISTS {table_name} CASCADE;""")
-
                     conn.commit()
                 except Exception as e:
                     print(f"Dropping the table {table_name} did not work:", e)
+                    conn.rollback()
 
     def add_data(self, song_dict: dict) -> None:
         """Add all song data (e.g. album, artist, song and many-to-many relationships) into the PostgreSQL tables, e.g. song, album, artist.
@@ -131,19 +144,21 @@ class DBConnector:
         Returns:
             UUID | None: The UUID of the inserted song
         """
+        # Check whether the song already exists
+        columns = ["title", "happy_non_happy", "sad_non_sad"]
+
+        if song_id := self.is_row_in_table("song", columns, song_dict):
+            return song_id
+
+        # Song does not exist so we want to insert it into the song table
         with psycopg.connect(f"dbname={self.__DB_NAME} user={self.__DB_USER} password={self.__DB_PASSWORD} host={self.__DB_HOST} port={self.__DB_PORT}") as conn:
             with conn.cursor() as cur:
-                # Check whether the song already exists
-                columns = ["title", "happy_non_happy", "sad_non_sad"]
-
-                if song_id := self.is_row_in_table("song", columns, song_dict):
-                    return song_id
-
-                # Song does not exist so we want to insert it into the song table
                 try:
+                    cur.execute("BEGIN;")
                     cur.execute("SELECT * FROM song LIMIT 0;")
                 except Exception as e:
                     print("An error occurred while connecting to the song table:", e)
+                    conn.rollback()
                     return None
                 else:
                     # Get column names from the song table
@@ -151,7 +166,7 @@ class DBConnector:
                                           for description in cur.description]
                     sql_column_names: str = f'({", ".join(column_names)})'
                     sql_values_placeholders: str = f'({", ".join(["%s" for _ in column_names])})'
-                    sql_insert_statement: str = f""" 
+                    sql_insert_statement: str = f"""
                                                     INSERT INTO song {sql_column_names}
                                                     VALUES {sql_values_placeholders}
                                                     RETURNING id;
@@ -161,7 +176,7 @@ class DBConnector:
                     sql_insert_values = [uuid4()]
 
                     for key, value in song_dict.items():
-                        if key not in ["album", "artist", "date", "tracknumber"]:
+                        if key not in ("album", "artist", "date", "tracknumber"):
                             if key == "valence_arousal":
                                 sql_insert_values.append(value[0])
                                 sql_insert_values.append(value[1])
@@ -169,13 +184,14 @@ class DBConnector:
                                 sql_insert_values.append(value)
 
                 try:
+                    cur.execute("BEGIN;")
                     cur.execute(sql_insert_statement, sql_insert_values)
+                    song_id = cur.fetchone()[0]
                 except Exception as e:
                     print(
                         f'Adding the song "{song_dict["title"]}" did not work:', e)
-                    return None
+                    conn.rollback()
                 else:
-                    song_id = cur.fetchone()[0]
                     print(
                         f'Adding the song "{song_dict["title"]}" with id "{song_id}" to the database successful!')
                     return song_id
@@ -189,34 +205,35 @@ class DBConnector:
         Returns:
             UUID | None: The UUID of the inserted album
         """
+        # Check whether the album already exists
+        columns = ["album", "date"]
+        if album_id := self.is_row_in_table("album", columns, song_dict):
+            return album_id
+
+        # Album does not exist so insert into the album table
+        sql_statement: str = """
+                                INSERT INTO album (title, date)
+                                VALUES (%s, %s)
+                                RETURNING id;
+                            """
+        try:
+            sql_values = [song_dict["album"], date(
+                int(song_dict["date"]), 1, 1)]
+        except KeyError as e:
+            print(
+                f'The key "album" does not exist in the dictionary: {song_dict}')
+            return None
+
         with psycopg.connect(f"dbname={self.__DB_NAME} user={self.__DB_USER} password={self.__DB_PASSWORD} host={self.__DB_HOST} port={self.__DB_PORT}") as conn:
             with conn.cursor() as cur:
-                # Check whether the album already exists
-                columns = ["album", "date"]
-                if album_id := self.is_row_in_table("album", columns, song_dict):
-                    return album_id
-
-                # Album does not exist so insert into the album table
-                sql_statement: str = """ 
-                                        INSERT INTO album (title, date)
-                                        VALUES (%s, %s)
-                                        RETURNING id;
-                                    """
                 try:
-                    sql_values = [song_dict["album"], date(
-                        int(song_dict["date"]), 1, 1)]
-                except KeyError as e:
-                    print(
-                        f'The key "album" does not exist in the dictionary: {song_dict}')
-                    return None
-
-                try:
+                    cur.execute("BEGIN;")
                     cur.execute(sql_statement, sql_values)
+                    album_id: tuple = cur.fetchone()[0]
                 except Exception as e:
                     print(f"An error occured while connecting to the database:", e)
-                    return None
+                    conn.rollback()
                 else:
-                    album_id: tuple = cur.fetchone()[0]
                     print(
                         f'Adding the album "{song_dict["album"]}" with id "{album_id}" to the database was successful!')
                     return album_id
@@ -230,19 +247,20 @@ class DBConnector:
         Returns:
             UUID | None: The UUID of the inserted artist
         """
+        # Check whether artist already exists
+        columns = ["artist"]
+        if artist_id := self.is_row_in_table("artist", columns, song_dict):
+            return artist_id
+
+        # Artist does not exist so insert into the artist table
+        sql_statement: str = """
+                                INSERT into artist (name)
+                                VALUES (%s)
+                                RETURNING id;
+                                """
+
         with psycopg.connect(f"dbname={self.__DB_NAME} user={self.__DB_USER} password={self.__DB_PASSWORD} host={self.__DB_HOST} port={self.__DB_PORT}") as conn:
             with conn.cursor() as cur:
-                # Check whether artist already exists
-                columns = ["artist"]
-                if artist_id := self.is_row_in_table("artist", columns, song_dict):
-                    return artist_id
-
-                # Artist does not exist so insert into the artist table
-                sql_statement: str = """
-                                        INSERT into artist (name)
-                                        VALUES (%s)
-                                        RETURNING id;
-                                        """
                 try:
                     sql_values = [song_dict["artist"]]
                 except KeyError as e:
@@ -250,12 +268,13 @@ class DBConnector:
                     return None
 
                 try:
+                    cur.execute("BEGIN;")
                     cur.execute(sql_statement, sql_values)
+                    artist_id: tuple = cur.fetchone()[0]
                 except Exception as e:
                     print("Could not execute sql statement:", sql_statement)
-                    return None
+                    conn.rollback()
                 else:
-                    artist_id: tuple = cur.fetchone()[0]
                     print(
                         f'Adding the artist "{song_dict["artist"]}" with id "{artist_id}" to the database was successful!')
                     return artist_id
@@ -289,12 +308,14 @@ class DBConnector:
                 sql_values = [first_id, second_id]
 
                 try:
+                    cur.execute("BEGIN;")
                     cur.execute(sql_statement, sql_values)
+                    rel_table_id: tuple = cur.fetchone()[0]
                 except Exception as e:
                     print("An error occured while inserting into the database:", e)
+                    conn.rollback()
                     return None
                 else:
-                    rel_table_id: tuple = cur.fetchone()[0]
                     print(
                         f'Adding the relation between {first_table} and {second_table} into {rel_table_id} successful')
                     return rel_table_id
@@ -339,9 +360,12 @@ class DBConnector:
         with psycopg.connect(f"dbname={self.__DB_NAME} user={self.__DB_USER} password={self.__DB_PASSWORD} host={self.__DB_HOST} port={self.__DB_PORT}") as conn:
             with conn.cursor() as cur:
                 try:
+                    cur.execute("BEGIN;")
                     cur.execute(sql_statement, sql_values)
                 except Exception as e:
                     print("An error occurred while looking at the database:", e)
+                    conn.rollback()
+                    return None
                 else:
                     result: tuple = cur.fetchone()
                     if result:
@@ -370,8 +394,10 @@ class DBConnector:
         with psycopg.connect(f"dbname={self.__DB_NAME} user={self.__DB_USER} password={self.__DB_PASSWORD} host={self.__DB_HOST} port={self.__DB_PORT}") as conn:
             with conn.cursor() as cur:
                 try:
+                    cur.execute("BEGIN;")
                     cur.execute(sql_statement, sql_values)
                 except Exception as e:
+                    conn.rollback()
                     print(
                         f"An error occurred while selecting an entry from the {rel_table} table:", e)
                 else:
@@ -383,7 +409,16 @@ class DBConnector:
                         return id
                     return None
 
-    def delete_all_entries(self, table_name: str) -> None:
+    def delete_all_entries(self, table_names: list[str]) -> None:
+        """Delete all entries in provided tables.
+
+        Args:
+            table_names (list[str]): Names of the tables
+        """
+        for table in table_names:
+            self.delete_all_entries_in_table(table)
+
+    def delete_all_entries_in_table(self, table_name: str) -> None:
         """Delete all entries from a table, e.g. all rows in "song" table.
 
         Args:
@@ -392,6 +427,39 @@ class DBConnector:
         with psycopg.connect(f"dbname={self.__DB_NAME} user={self.__DB_USER} password={self.__DB_PASSWORD} host={self.__DB_HOST} port={self.__DB_PORT}") as conn:
             with conn.cursor() as cur:
                 try:
+                    cur.execute("BEGIN")
                     cur.execute(f"DELETE FROM {table_name};")
                 except Exception as e:
-                    print(f'Could not delete entries in "{table_name}"')
+                    conn.rollback()
+                    print(f'Could not delete entries in "{table_name}":', e)
+
+
+# Testing:
+
+if __name__ == "__main__":
+    song_dict = {'album': 'Satch Plays Fats', 'artist': 'Louis Armstrong', 'comment:n': 'Converted by https://spotifydown.com', 'date': '1955', 'title': "I'm Crazy 'Bout My Baby - Edit", 'tracknumber': '', 'valence_arousal': (
+        5.886054, 5.5037227), 'danceable_not_danceable': 0.19786096256684493, 'aggressive_non_aggressive': 0.0, 'happy_non_happy': 0.09090909090909091, 'party_non_party': 0.7165775401069518, 'relaxed_non_relaxed': 0.0, 'sad_non_sad': 0.18085106382978725, 'acoustic_non_acoustic': 0.475177304964539, 'electronic_non_electronic': 0.0, 'instrumental_voice': 0.3333333333333333, 'female_male': 0.19858156028368795, 'bright_dark': 0.014184397163120567, 'acoustic_electronic': 0.014184397163120567, 'dry_wet': 0.7553191489361702}
+    db_connector = DBConnector(os.getenv("DB_NAME"),
+                               os.getenv("DB_USER"),
+                               os.getenv("DB_PASSWORD"),
+                               os.getenv("DB_HOST"),
+                               os.getenv("DB_PORT"))
+
+    # Deleting all entries
+    db_connector.delete_all_entries_in_table("song")
+    db_connector.delete_all_entries_in_table("album")
+    db_connector.delete_all_entries_in_table("artist")
+
+    # Deleting all tables
+    # db_connector.drop_table("song")
+    # db_connector.drop_table("album")
+    # db_connector.drop_table("artist")
+    # db_connector.drop_table("song_album")
+    # db_connector.drop_table("song_artist")
+    # db_connector.drop_table("album_artist")
+
+    # # Creating tables
+    # db_connector.create_tables()
+
+    # Add data
+    db_connector.add_data(song_dict)

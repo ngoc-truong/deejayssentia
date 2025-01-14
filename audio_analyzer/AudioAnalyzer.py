@@ -1,7 +1,8 @@
-from essentia.standard import MonoLoader, MetadataReader, TensorflowPredictEffnetDiscogs, TensorflowPredict2D, TensorflowPredictMusiCNN, RhythmExtractor2013
-import numpy as np
-from pathlib import Path, PosixPath, WindowsPath
 import json
+import numpy as np
+
+from essentia.standard import MonoLoader, MetadataReader, TensorflowPredictEffnetDiscogs, TensorflowPredict2D, TensorflowPredictMusiCNN, RhythmExtractor2013
+from pathlib import Path, PosixPath, WindowsPath
 
 
 class AudioAnalyzer:
