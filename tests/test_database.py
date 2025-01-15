@@ -13,7 +13,7 @@ load_dotenv()
 
 @pytest.fixture
 def song_dict() -> dict:
-    song_dict = {'album': 'Satch Plays Fats', 'artist': 'Louis Armstrong', 'comment:n': 'Converted by https://spotifydown.com', 'date': '1955', 'title': "I'm Crazy 'Bout My Baby - Edit", 'tracknumber': '', 'valence_arousal': (
+    song_dict: dict = {'album': 'Satch Plays Fats', 'artist': 'Louis Armstrong', 'comment:n': 'Converted by https://spotifydown.com', 'date': '1955', 'title': "I'm Crazy 'Bout My Baby - Edit", 'tracknumber': '', 'valence_arousal': (
         5.886054, 5.5037227), 'danceable_not_danceable': 0.19786096256684493, 'aggressive_non_aggressive': 0.0, 'happy_non_happy': 0.09090909090909091, 'party_non_party': 0.7165775401069518, 'relaxed_non_relaxed': 0.0, 'sad_non_sad': 0.18085106382978725, 'acoustic_non_acoustic': 0.475177304964539, 'electronic_non_electronic': 0.0, 'instrumental_voice': 0.3333333333333333, 'female_male': 0.19858156028368795, 'bright_dark': 0.014184397163120567, 'acoustic_electronic': 0.014184397163120567, 'dry_wet': 0.7553191489361702}
 
     return song_dict
@@ -21,11 +21,11 @@ def song_dict() -> dict:
 
 @pytest.fixture
 def db_connector() -> DBConnector:
-    db_connector = DBConnector(os.getenv("DB_NAME"),
-                               os.getenv("DB_USER"),
-                               os.getenv("DB_PASSWORD"),
-                               os.getenv("DB_HOST"),
-                               os.getenv("DB_PORT"))
+    db_connector: DBConnector = DBConnector(os.getenv("DB_NAME"),
+                                            os.getenv("DB_USER"),
+                                            os.getenv("DB_PASSWORD"),
+                                            os.getenv("DB_HOST"),
+                                            os.getenv("DB_PORT"))
     return db_connector
 
 
@@ -36,7 +36,7 @@ def env_as_str() -> str:
     Returns:
         str: environment variables as a string
     """
-    env_string = f"dbname={os.getenv('DB_NAME')} user={os.getenv('DB_USER')} password={os.getenv('DB_PASSWORD')} host={os.getenv('DB_HOST')} port={os.getenv('DB_PORT')}"
+    env_string: str = f"dbname={os.getenv('DB_NAME')} user={os.getenv('DB_USER')} password={os.getenv('DB_PASSWORD')} host={os.getenv('DB_HOST')} port={os.getenv('DB_PORT')}"
     return env_string
 
 
@@ -47,8 +47,8 @@ def table_names() -> list:
     Returns:
         list: Name of tables
     """
-    table_names = ["album", "album_artist", "artist",
-                   "song", "song_album", "song_artist"]
+    table_names: list = ["album", "album_artist", "artist",
+                         "song", "song_album", "song_artist"]
     return table_names
 
 
@@ -81,13 +81,13 @@ def test_add_data_will_increase_number_of_rows(table_names: list[str], song_dict
     with psycopg.connect(env_as_str) as conn:
         with conn.cursor() as cur:
             # Check number of rows at beginning
-            old_counts = get_num_of_rows(table_names, cur)
+            old_counts: list[int] = get_num_of_rows(table_names, cur)
 
             # Add data to all tables
             db_connector.add_data(song_dict)
 
             # Check number of rows again
-            new_counts = get_num_of_rows(table_names, cur)
+            new_counts: list[int] = get_num_of_rows(table_names, cur)
 
             assert old_counts != new_counts
             for index, count in enumerate(new_counts):
@@ -107,10 +107,10 @@ def test_row_already_exists(table_names: list[str], song_dict: dict, env_as_str:
     with psycopg.connect(env_as_str) as conn:
         with conn.cursor() as cur:
             db_connector.add_data(song_dict)
-            old_counts = get_num_of_rows(table_names, cur)
+            old_counts: list[int] = get_num_of_rows(table_names, cur)
 
             db_connector.add_data(song_dict)
-            new_counts = get_num_of_rows(table_names, cur)
+            new_counts: list[int] = get_num_of_rows(table_names, cur)
 
             assert old_counts == new_counts
 
@@ -126,7 +126,7 @@ def test_row_already_exists_in_one_table(song_dict: dict, env_as_str: str, db_co
     """
     with psycopg.connect(env_as_str) as conn:
         with conn.cursor() as cur:
-            song_id = db_connector.add_song(song_dict)
+            song_id: UUID = db_connector.add_song(song_dict)
             num_of_rows = get_num_of_rows_where("id", song_id, "song", cur)
 
             # It will return the already existent song_id, see below
@@ -211,13 +211,16 @@ def get_num_of_rows(table_names: list[str], cur: Cursor) -> list[int]:
     return num_rows
 
 
-def get_num_of_rows_where(column_name: str, column_value: UUID | str, table_name: str, cur: Cursor) -> None:
+def get_num_of_rows_where(column_name: str, column_value: UUID | str, table_name: str, cur: Cursor) -> int:
     """Returns how many rows of a where condition, e.g. id = 3123 are in the table
 
     Args:
         column (UUID | str): The column to look for
         table_name (str): The table name
         cur (Cursor): A psycopg cursor object
+
+    Returns
+        int: The number of rows where a condition is met
     """
     try:
         cur.execute(

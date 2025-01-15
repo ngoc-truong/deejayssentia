@@ -20,7 +20,7 @@ class AudioAnalyzer:
         self.__song_info: dict = None
 
     @property
-    def file_path(self):
+    def file_path(self) -> str:
         return self.__file_path
 
     @file_path.setter
@@ -31,7 +31,7 @@ class AudioAnalyzer:
             abs_path: Path = new_path.resolve()
 
         if not abs_path.is_file():
-            raise FileNotFoundError(f"The file '{abs_path}' does not exist")
+            raise FileNotFoundError(f"The file '{abs_path}' does not exist.")
         self.__file_path: str = str(abs_path)
 
     @property

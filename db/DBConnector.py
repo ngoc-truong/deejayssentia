@@ -1,5 +1,5 @@
-import os
 import psycopg
+import re
 
 from datetime import date
 from dotenv import load_dotenv
@@ -440,3 +440,30 @@ class DBConnector:
                 except Exception as e:
                     conn.rollback()
                     print(f'Could not delete entries in "{table_name}":', e)
+
+    def get_correct_date_format(date_string: str) -> date | None:
+        """Get the correct date format, e.g. if only a "1999" is given, it will become
+           an date object with 1999-01-01.
+
+        Args:
+            date_string (str): A date string, e.g. "1999"
+
+        Returns:
+            date | None: A date object
+        """
+
+        year_pattern = r'^\d{4}$'
+        year_month_pattern = r'^\d{4}-\d{2}$'
+        year_month_day_pattern = r'^\d{4}-\d{2}-\d{2}$'
+
+        if re.match(year_month_day_pattern, date_string):
+            year, month, day = date_string.split("-")
+            return date(int(year), int(month), int(day))
+        elif re.match(year_month_pattern, date_string):
+            year, month = date_string.split("-")
+            return date(int(year), int(month), 1)
+        elif re.match(year_pattern, date_string):
+            return date(int(date_string), 1, 1)
+        else:
+            print(f'Date format: f"{date_string}"is invalid.')
+            return None
