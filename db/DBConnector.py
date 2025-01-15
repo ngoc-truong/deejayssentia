@@ -45,7 +45,8 @@ class DBConnector:
                                     female_male FLOAT,
                                     bright_dark FLOAT,
                                     acoustic_electronic FLOAT,
-                                    dry_wet FLOAT
+                                    dry_wet FLOAT,
+                                    bpm FLOAT
                                 );
                                 """)
 
@@ -90,7 +91,8 @@ class DBConnector:
                                 """)
 
                     conn.commit()
-                    print("Creating database tables was succesfull!")
+                    print(
+                        "Creating database tables was succesfull or tables already exist!")
                 except Exception as e:
                     print("Creating database tables did not work:", e)
                     conn.rollback()
@@ -443,20 +445,20 @@ class DBConnector:
 # Testing:
 
 if __name__ == "__main__":
-    song_dict = {'album': 'Satch Plays Fats', 'artist': 'Louis Armstrong', 'comment:n': 'Converted by https://spotifydown.com', 'date': '1955', 'title': "I'm Crazy 'Bout My Baby - Edit", 'tracknumber': '', 'valence_arousal': (
-        5.886054, 5.5037227), 'danceable_not_danceable': 0.19786096256684493, 'aggressive_non_aggressive': 0.0, 'happy_non_happy': 0.09090909090909091, 'party_non_party': 0.7165775401069518, 'relaxed_non_relaxed': 0.0, 'sad_non_sad': 0.18085106382978725, 'acoustic_non_acoustic': 0.475177304964539, 'electronic_non_electronic': 0.0, 'instrumental_voice': 0.3333333333333333, 'female_male': 0.19858156028368795, 'bright_dark': 0.014184397163120567, 'acoustic_electronic': 0.014184397163120567, 'dry_wet': 0.7553191489361702}
+    song_dict = {'album': 'The Wildest! (Expanded Edition)', 'artist': 'Louis Prima/Keely Smith/Sam Butera & The Witnesses', 'comment:n': 'Converted by https://spotifydown.com', 'date': '1956', 'title': "Basin Street Blues/When It's Sleepy Time Down South - Medley / Remastered", 'tracknumber': '', 'valence_arousal': (6.4735055, 6.228614), 'danceable_not_danceable': 0.4319526627218935, 'aggressive_non_aggressive': 0.0, 'happy_non_happy': 0.5798816568047337,
+                 'party_non_party': 0.3136094674556213, 'relaxed_non_relaxed': 0.03529411764705882, 'sad_non_sad': 0.5333333333333333, 'acoustic_non_acoustic': 0.7058823529411765, 'electronic_non_electronic': 0.0, 'instrumental_voice': 0.10980392156862745, 'female_male': 0.09411764705882353, 'bright_dark': 0.19215686274509805, 'acoustic_electronic': 0.19215686274509805, 'dry_wet': 0.8705882352941177, 'bpm': 152.93545532226562}
     db_connector = DBConnector(os.getenv("DB_NAME"),
                                os.getenv("DB_USER"),
                                os.getenv("DB_PASSWORD"),
                                os.getenv("DB_HOST"),
                                os.getenv("DB_PORT"))
 
-    # Deleting all entries
-    db_connector.delete_all_entries_in_table("song")
-    db_connector.delete_all_entries_in_table("album")
-    db_connector.delete_all_entries_in_table("artist")
+    # # Deleting all entries
+    # db_connector.delete_all_entries_in_table("song")
+    # db_connector.delete_all_entries_in_table("album")
+    # db_connector.delete_all_entries_in_table("artist")
 
-    # Deleting all tables
+    # # Deleting all tables
     # db_connector.drop_table("song")
     # db_connector.drop_table("album")
     # db_connector.drop_table("artist")
@@ -464,8 +466,8 @@ if __name__ == "__main__":
     # db_connector.drop_table("song_artist")
     # db_connector.drop_table("album_artist")
 
-    # # Creating tables
-    # db_connector.create_tables()
+    # Creating tables
+    db_connector.create_tables()
 
     # Add data
     db_connector.add_data(song_dict)
