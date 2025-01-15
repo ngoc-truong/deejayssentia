@@ -216,14 +216,20 @@ class DBConnector:
                                 VALUES (%s, %s)
                                 RETURNING id;
                             """
-        try:
-            sql_values = [song_dict["album"], date(
-                int(song_dict["date"]), 1, 1)]
-        except KeyError as e:
+        if "album" not in song_dict.keys():
             print(
                 f'The key "album" does not exist in the dictionary: {song_dict}')
             return None
 
+        try:
+            year: int = int(song_dict["date"])
+        except ValueError as e:
+            print(f'Check the date: {song_dict["date"]}:', e)
+            return None
+
+        sql_values = [song_dict["album"], date(year, 1, 1)]
+
+        # Database connection
         with psycopg.connect(f"dbname={self.__DB_NAME} user={self.__DB_USER} password={self.__DB_PASSWORD} host={self.__DB_HOST} port={self.__DB_PORT}") as conn:
             with conn.cursor() as cur:
                 try:
