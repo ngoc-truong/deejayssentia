@@ -225,10 +225,3 @@ class AudioAnalyzer:
         # Save as in an instance variable
         self.song_info: dict = audio_info
         return audio_info
-
-
-if __name__ == "__main__":
-    file_path = f"{Path(__file__).parent.parent.joinpath('music', 'danceable.mp3').resolve()}"
-
-    audio_analyzer = AudioAnalyzer(file_path)
-    print(audio_analyzer.get_complete_song_info())
