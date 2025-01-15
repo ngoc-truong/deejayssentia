@@ -440,34 +440,3 @@ class DBConnector:
                 except Exception as e:
                     conn.rollback()
                     print(f'Could not delete entries in "{table_name}":', e)
-
-
-# Testing:
-
-if __name__ == "__main__":
-    song_dict = {'album': 'The Wildest! (Expanded Edition)', 'artist': 'Louis Prima/Keely Smith/Sam Butera & The Witnesses', 'comment:n': 'Converted by https://spotifydown.com', 'date': '1956', 'title': "Basin Street Blues/When It's Sleepy Time Down South - Medley / Remastered", 'tracknumber': '', 'valence_arousal': (6.4735055, 6.228614), 'danceable_not_danceable': 0.4319526627218935, 'aggressive_non_aggressive': 0.0, 'happy_non_happy': 0.5798816568047337,
-                 'party_non_party': 0.3136094674556213, 'relaxed_non_relaxed': 0.03529411764705882, 'sad_non_sad': 0.5333333333333333, 'acoustic_non_acoustic': 0.7058823529411765, 'electronic_non_electronic': 0.0, 'instrumental_voice': 0.10980392156862745, 'female_male': 0.09411764705882353, 'bright_dark': 0.19215686274509805, 'acoustic_electronic': 0.19215686274509805, 'dry_wet': 0.8705882352941177, 'bpm': 152.93545532226562}
-    db_connector = DBConnector(os.getenv("DB_NAME"),
-                               os.getenv("DB_USER"),
-                               os.getenv("DB_PASSWORD"),
-                               os.getenv("DB_HOST"),
-                               os.getenv("DB_PORT"))
-
-    # # Deleting all entries
-    # db_connector.delete_all_entries_in_table("song")
-    # db_connector.delete_all_entries_in_table("album")
-    # db_connector.delete_all_entries_in_table("artist")
-
-    # # Deleting all tables
-    # db_connector.drop_table("song")
-    # db_connector.drop_table("album")
-    # db_connector.drop_table("artist")
-    # db_connector.drop_table("song_album")
-    # db_connector.drop_table("song_artist")
-    # db_connector.drop_table("album_artist")
-
-    # Creating tables
-    db_connector.create_tables()
-
-    # Add data
-    db_connector.add_data(song_dict)
