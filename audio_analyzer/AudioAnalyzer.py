@@ -208,16 +208,27 @@ class AudioAnalyzer:
         Returns:
             dict: Metadata and song features (e.g. danceability)
         """
-        # metadata
+        # Metadata
         audio_info: dict = self.get_metadata()
 
-        # audio feature predictions
+        # Audio feature predictions
         audio_feature_config: dict = self.__get_audio_feature_config()
         audio_features = list(audio_feature_config.keys())
         predictions: dict = {feature: self.calculate_prediction_metric(
             feature) for feature in audio_features}
-
         audio_info.update(predictions)
+
+        # Bpm
+        bpm: float = float(self.get_rhythm_data()["bpm"])
+        audio_info["bpm"] = bpm
+
         # Save as in an instance variable
         self.song_info: dict = audio_info
         return audio_info
+
+
+if __name__ == "__main__":
+    file_path = f"{Path(__file__).parent.parent.joinpath('music', 'danceable.mp3').resolve()}"
+
+    audio_analyzer = AudioAnalyzer(file_path)
+    print(audio_analyzer.get_complete_song_info())
