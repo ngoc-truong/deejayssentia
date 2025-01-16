@@ -41,15 +41,22 @@ class PlaylistAnalyzer:
         return filenames
 
     def get_all_song_info(self) -> list[dict]:
+        """Will get all song infos from mp3 and flac files.
 
+        Returns:
+            list[dict]: A list with song info dictionaries for each song
+        """
         filenames: list[str] = self.get_filenames()
 
         song_infos = []
 
         for name in filenames:
-            audio_analyzer = AudioAnalyzer(
-                f"{Path.joinpath(self.folder_path, name)}")
-            song_info: dict = audio_analyzer.get_complete_song_info()
-            song_infos.append(song_info)
+            if name.endswith((".mp3", ".flac", ".wav", ".m4a", ".ogg", ".aiff")):
+                audio_analyzer = AudioAnalyzer(
+                    f"{Path.joinpath(self.folder_path, name)}")
+                song_info: dict = audio_analyzer.get_complete_song_info()
+                song_infos.append(song_info)
+            else:
+                print(f'"{name}" is not an audio file')
 
         return song_infos

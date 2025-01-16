@@ -30,8 +30,12 @@ class AudioAnalyzer:
         elif isinstance(new_path, Path) or isinstance(new_path, PosixPath) or isinstance(new_path, WindowsPath):
             abs_path: Path = new_path.resolve()
 
-        if not abs_path.is_file():
+        if not abs_path.is_file() and abs_path.suffix:
             raise FileNotFoundError(f"The file '{abs_path}' does not exist.")
+
+        if abs_path.suffix not in {".mp3", ".flac", ".wav", ".m4a", ".ogg", ".aiff"}:
+            raise ValueError(f"No audio file was provided:", abs_path.suffix)
+
         self.__file_path: str = str(abs_path)
 
     @property

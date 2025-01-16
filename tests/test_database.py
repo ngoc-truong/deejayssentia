@@ -2,11 +2,12 @@ import os
 import psycopg
 import pytest
 
-from db.DBConnector import DBConnector
+from datetime import date
 from dotenv import load_dotenv
 from psycopg import Cursor
 from uuid import UUID
 
+from db.DBConnector import DBConnector
 
 load_dotenv()
 
@@ -15,8 +16,14 @@ load_dotenv()
 def song_dict() -> dict:
     song_dict: dict = {'album': 'Satch Plays Fats', 'artist': 'Louis Armstrong', 'comment:n': 'Converted by https://spotifydown.com', 'date': '1955', 'title': "I'm Crazy 'Bout My Baby - Edit", 'tracknumber': '', 'valence_arousal': (
         5.886054, 5.5037227), 'danceable_not_danceable': 0.19786096256684493, 'aggressive_non_aggressive': 0.0, 'happy_non_happy': 0.09090909090909091, 'party_non_party': 0.7165775401069518, 'relaxed_non_relaxed': 0.0, 'sad_non_sad': 0.18085106382978725, 'acoustic_non_acoustic': 0.475177304964539, 'electronic_non_electronic': 0.0, 'instrumental_voice': 0.3333333333333333, 'female_male': 0.19858156028368795, 'bright_dark': 0.014184397163120567, 'acoustic_electronic': 0.014184397163120567, 'dry_wet': 0.7553191489361702}
-
     return song_dict
+
+
+@pytest.fixture
+def long_song_dict() -> dict:
+    long_song_dict: dict = {'album': 'Hello Dolly (Remastered)', 'artist': 'Louis Armstrong', 'author': 'Louis Amstrong', 'composer': 'Louis Amstrong', 'copyright': '© 2014 Caribe Sound', 'date': '2014-12-10', 'discnumber': '1', 'isrc': 'ES6601404354', 'lyrics': "Cold empty bed, springs hard as lead\r\nFeel like old Ned, wished I was dead\r\nWhat did I do to be so black and blue?\r\n \r\nEven the mouse ran from my house\r\nThey laugh at you, and scorn you too\r\nWhat did I do to be so black and blue?\r\n \r\nI'm white inside, but that don't help my case\r\n'Cause I can't hide what is in my face\r\n \r\nHow would it end? Ain't got a friend\r\nMy only sin is in my skin\r\nWhat did I do to be so black and blue?\r\n\r\nHow would it end? Ain't got a friend\r\nMy only sin is in my skin\r\nWhat did I do to be so black and blue?",
+                            'main_artist': 'Louis Amstrong', 'rating': 'Clean', 'title': 'Black and Blue (Remastered)', 'tracknumber': '3', 'valence_arousal': (5.1433234, 4.6531215), 'danceable_not_danceable': 0.005319148936170213, 'aggressive_non_aggressive': 0.0, 'happy_non_happy': 0.010638297872340425, 'party_non_party': 0.9308510638297872, 'relaxed_non_relaxed': 0.0035335689045936395, 'sad_non_sad': 0.01060070671378092, 'acoustic_non_acoustic': 0.24734982332155478, 'electronic_non_electronic': 0.0, 'instrumental_voice': 0.08833922261484099, 'female_male': 0.6996466431095406, 'bright_dark': 0.0, 'acoustic_electronic': 0.0, 'dry_wet': 0.6325088339222615, 'bpm': 99.64744567871094}
+    return long_song_dict
 
 
 @pytest.fixture
@@ -94,7 +101,7 @@ def test_add_data_will_increase_number_of_rows(table_names: list[str], song_dict
                 assert count == old_counts[index] + 1
 
 
-def test_row_already_exists(table_names: list[str], song_dict: dict, env_as_str: str, db_connector: DBConnector, create_and_clean_database) -> None:
+def test_row_already_exists(table_names: list[str], song_dict: dict, env_as_str: str, db_connector: DBConnector, create_and_clean_database: pytest.fixture) -> None:
     """Test if a row already exists (in all tables provided).
 
     Args:
@@ -115,7 +122,7 @@ def test_row_already_exists(table_names: list[str], song_dict: dict, env_as_str:
             assert old_counts == new_counts
 
 
-def test_row_already_exists_in_one_table(song_dict: dict, env_as_str: str, db_connector: DBConnector, create_and_clean_database) -> None:
+def test_row_already_exists_in_one_table(song_dict: dict, env_as_str: str, db_connector: DBConnector, create_and_clean_database: pytest.fixture) -> None:
     """Test in one table, e.g. song, whether there is already an entry and that the entry will not be overwritten by a new one.
 
     Args:
@@ -137,7 +144,7 @@ def test_row_already_exists_in_one_table(song_dict: dict, env_as_str: str, db_co
             assert num_of_rows == 1
 
 
-def test_relationship_works(song_dict: dict, env_as_str: str, db_connector: DBConnector, create_and_clean_database) -> None:
+def test_relationship_works(song_dict: dict, env_as_str: str, db_connector: DBConnector, create_and_clean_database: pytest.fixture) -> None:
     """Test whether adding a relationship (e.g. song_artist) works and whether adding the same relationship will not be commited.
 
     Args:
@@ -184,7 +191,50 @@ def test_relationship_works(song_dict: dict, env_as_str: str, db_connector: DBCo
                 assert num_of_rows == 1
 
 
+def test_only_relevant_columns_will_be_inserted(song_dict: dict, long_song_dict: dict, db_connector, create_and_clean_database: pytest.fixture) -> None:
+    """Test whether only the relevant columns will be inserted although longer dictionaries are provided.
+
+    Args:
+        song_dict (dict): Data of the song, e.g. danceabe_non_dancable, arousal, valence
+        db_connector (DBConnector): An instance of the DBConnector class
+        create_and_clean_database (pytest.fixture): Pytest fixture to create the tables and clean the tables after the test was done
+    """
+
+    first_id: UUID = db_connector.add_song(song_dict)
+    second_id: UUID = db_connector.add_song(long_song_dict)
+
+    assert first_id
+    assert second_id
+
+
 # Helper functions
+def test_correct_date_format(db_connector) -> None:
+    year_incorrectmonth_day: str = "1999-13-01"
+    year_month_incorrectday: str = "1999-12-32"
+    year_incorrectmonth: str = "1999-13"
+    incorrectyear_long: str = "12345"
+    incorrectyear_short: str = "123"
+    incorrect: str = "Hello"
+
+    incorrect_date_formats: list = [year_incorrectmonth_day, year_month_incorrectday,
+                                    year_incorrectmonth, incorrectyear_long, incorrectyear_short, incorrect]
+
+    for format in incorrect_date_formats:
+        date_format = db_connector.get_correct_date_format(format)
+        assert date_format == None
+
+    # Test year_month_day, "YYYY-MM-DD"
+    year_month_day = "1999-12-03"
+    year_month = "1999-12"
+    year = "1999"
+    correct_date_formats: list = [year_month_day, year_month, year]
+
+    for format in correct_date_formats:
+        date_format: date = db_connector.get_correct_date_format(format)
+        assert isinstance(date_format, date)
+        assert date_format.year == 1999
+        assert date_format.month == 12 or date_format.month == 1
+        assert date_format.day == 3 or date_format.day == 1
 
 
 def get_num_of_rows(table_names: list[str], cur: Cursor) -> list[int]:

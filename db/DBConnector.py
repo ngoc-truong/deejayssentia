@@ -18,6 +18,29 @@ class DBConnector:
         self.__DB_PASSWORD: str = db_password
         self.__DB_HOST: str = db_host
         self.__DB_PORT: str = db_port
+        self.__columns_of_interest: list[str] = [
+            "album",
+            "artist",
+            # "comment:n",
+            "date",
+            "title",
+            "tracknumber",
+            "valence_arousal",
+            "danceable_not_danceable",
+            "aggressive_non_aggressive",
+            "happy_non_happy",
+            "party_non_party",
+            "relaxed_non_relaxed",
+            "sad_non_sad",
+            "acoustic_non_acoustic",
+            "electronic_non_electronic",
+            "instrumental_voice",
+            "female_male",
+            "bright_dark",
+            "acoustic_electronic",
+            "dry_wet",
+            "bpm"
+        ]
 
     def create_tables(self) -> None:
         """Create tables for song, artist and album.
@@ -29,7 +52,6 @@ class DBConnector:
                     cur.execute("""
                                 CREATE TABLE IF NOT EXISTS song (
                                     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-                                    comment TEXT,
                                     title TEXT NOT NULL,
                                     valence FLOAT,
                                     arousal FLOAT,
@@ -178,7 +200,7 @@ class DBConnector:
                     sql_insert_values = [uuid4()]
 
                     for key, value in song_dict.items():
-                        if key not in ("album", "artist", "date", "tracknumber"):
+                        if key not in ("album", "artist", "date", "tracknumber") and key in self.__columns_of_interest:
                             if key == "valence_arousal":
                                 sql_insert_values.append(value[0])
                                 sql_insert_values.append(value[1])
@@ -223,15 +245,15 @@ class DBConnector:
                 f'The key "album" does not exist in the dictionary: {song_dict}')
             return None
 
-        try:
-            date_string: int = int(song_dict["date"])
-        except ValueError as e:
-            print(f'Check the date: {song_dict["date"]}:', e)
-            return None
+        # try:
+        #     date_string: int = int(song_dict["date"])
+        # except ValueError as e:
+        #     print(f'Check the date: {song_dict["date"]}:', e)
+        #     return None
 
         # sql_values = [song_dict["album"], date(year, 1, 1)]
         sql_values = [song_dict["album"],
-                      self.get_correct_date_format(date_string)]
+                      self.get_correct_date_format(song_dict["date"])]
 
         # Database connection
         with psycopg.connect(f"dbname={self.__DB_NAME} user={self.__DB_USER} password={self.__DB_PASSWORD} host={self.__DB_HOST} port={self.__DB_PORT}") as conn:
@@ -470,7 +492,9 @@ class DBConnector:
             if 1 <= month <= 12 and 1 <= day <= 31:
                 return date(year, month, day)
         elif re.match(year_month_pattern, date_string):
-            year, month = date_string.split("-")
+            year: int
+            month: int
+            year, month = map(int, date_string.split("-"))
             if 1 <= month <= 12:
                 return date(year, month, 1)
         elif re.match(year_pattern, date_string):
