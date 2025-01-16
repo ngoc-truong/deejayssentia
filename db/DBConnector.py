@@ -188,6 +188,7 @@ class DBConnector:
                     # Get column names from the song table
                     column_names: list = [description[0]
                                           for description in cur.description]
+
                     sql_column_names: str = f'({", ".join(column_names)})'
                     sql_values_placeholders: str = f'({", ".join(["%s" for _ in column_names])})'
                     sql_insert_statement: str = f"""
