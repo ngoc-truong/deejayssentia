@@ -224,12 +224,14 @@ class DBConnector:
             return None
 
         try:
-            year: int = int(song_dict["date"])
+            date_string: int = int(song_dict["date"])
         except ValueError as e:
             print(f'Check the date: {song_dict["date"]}:', e)
             return None
 
-        sql_values = [song_dict["album"], date(year, 1, 1)]
+        # sql_values = [song_dict["album"], date(year, 1, 1)]
+        sql_values = [song_dict["album"],
+                      self.get_correct_date_format(date_string)]
 
         # Database connection
         with psycopg.connect(f"dbname={self.__DB_NAME} user={self.__DB_USER} password={self.__DB_PASSWORD} host={self.__DB_HOST} port={self.__DB_PORT}") as conn:
@@ -360,8 +362,10 @@ class DBConnector:
             if key in columns:
                 # Check for date objects
                 if key == "date":
+                    # sql_values.append(
+                    #     date(int(song_dict[key]), 1, 1))
                     sql_values.append(
-                        date(int(song_dict[key]), 1, 1))
+                        self.get_correct_date_format(song_dict[key]))
                 else:
                     sql_values.append(song_dict[key])
 
@@ -441,7 +445,7 @@ class DBConnector:
                     conn.rollback()
                     print(f'Could not delete entries in "{table_name}":', e)
 
-    def get_correct_date_format(date_string: str) -> date | None:
+    def get_correct_date_format(self, date_string: str) -> date | None:
         """Get the correct date format, e.g. if only a "1999" is given, it will become
            an date object with 1999-01-01.
 
@@ -451,19 +455,26 @@ class DBConnector:
         Returns:
             date | None: A date object
         """
-
+        if not isinstance(date_string, str):
+            date_string: str = str(date_string)
         year_pattern = r'^\d{4}$'
         year_month_pattern = r'^\d{4}-\d{2}$'
         year_month_day_pattern = r'^\d{4}-\d{2}-\d{2}$'
 
         if re.match(year_month_day_pattern, date_string):
-            year, month, day = date_string.split("-")
-            return date(int(year), int(month), int(day))
+            year: int
+            month: int
+            day: int
+            year, month, day = map(int, date_string.split("-"))
+
+            if 1 <= month <= 12 and 1 <= day <= 31:
+                return date(year, month, day)
         elif re.match(year_month_pattern, date_string):
             year, month = date_string.split("-")
-            return date(int(year), int(month), 1)
+            if 1 <= month <= 12:
+                return date(year, month, 1)
         elif re.match(year_pattern, date_string):
             return date(int(date_string), 1, 1)
-        else:
-            print(f'Date format: f"{date_string}"is invalid.')
-            return None
+
+        print(f'Date format: f"{date_string}"is invalid.')
+        return None
